@@ -102,7 +102,18 @@ if (strlen($_SESSION['id'] == 0)) {
                             pci.cash_type,
                             pci.treatment_type,
                             tpa.tpa_address,
-                            tpaa.tpa_address AS tpa_address_insurrance
+                            tpaa.tpa_address AS tpa_address_insurrance,
+                            pddd.filedispatch_address,
+                            pddd.all_in_one_document,
+                            pddd.query_resolution_doc_dispatch,
+                            pkd.doctor_prescription,
+                            pkd.reports,
+                            pkd.past_treatment_record,
+                            pkd.patient_adhaar_card,
+                            pkd.patient_insurance_card,
+                            pkd.primary_insured_adhaar,
+                            pkd.primary_insured_insurance,
+                            pkd.primary_insured_pan
                             FROM patient_cases_info pci
                             LEFT JOIN hospitals h ON pci.hospital_id = h.id  
                             LEFT JOIN doctors d ON pci.doctor_id = d.id
@@ -117,6 +128,8 @@ if (strlen($_SESSION['id'] == 0)) {
                             LEFT JOIN patient_discharge_details pdd ON pci.id = pdd.case_id
                             LEFT JOIN patient_pod_details ppodd ON pci.id = ppodd.case_id
                             LEFT JOIN patient_nme_details pnmed ON pci.id = pnmed.case_id
+                            LEFT JOIN patient_dispatch_details pddd ON pci.id = pddd.case_id
+                            LEFT JOIN patient_kyc_details pkd ON pci.id = pkd.case_id
                             LEFT JOIN patients p ON pci.patient_id = p.id
                             LEFT JOIN patient_decoded_details pdecodedd ON pci.id = pdecodedd.case_id
                           WHERE pci.id = '$cid'");
@@ -1533,47 +1546,83 @@ if (strlen($_SESSION['id'] == 0)) {
 
   if (isset($_POST['submit-patient-policy-remark'])) {
 
-    $policy = mysqli_query(
-      $con,
-      "SELECT 
+    $target_dir = "../uploads/";
+
+    if (!is_dir($target_dir)) {
+      mkdir($target_dir, 0777, true);
+    }
+
+    $currentTimee = date("YmdHis"); // Format timestamp as YearMonthDayHourMinuteSecond
+
+    $allowedTypes = array("pdf", "doc", "docx", "txt");
+
+    function handleFileUpload($file, $fieldName, $cid, $currentTimee, $target_dir, $allowedTypes, &$upload_errors)
+    {
+      $target_file = $target_dir . $cid . '_' . $fieldName . '_' . $currentTimee . '.' . strtolower(pathinfo($file["name"], PATHINFO_EXTENSION));
+      $fileType = strtolower(pathinfo($target_file, PATHINFO_EXTENSION));
+
+      if (!empty($file['name']) && in_array($fileType, $allowedTypes)) {
+        if (move_uploaded_file($file["tmp_name"], $target_file)) {
+          return $target_file;
+        } else {
+          $upload_errors[] = "Sorry, there was an error uploading your $fieldName.";
+          return null;
+        }
+      } else if (!empty($file['name'])) {
+        $upload_errors[] = "Sorry, only PDF, DOC, DOCX, and TXT files are allowed for $fieldName.";
+        return null;
+      }
+      return null;
+    }
+
+    $upload_errors = array();
+
+    $query_related_document = handleFileUpload($_FILES['query_related_document'], 'query_related_document', $cid, $currentTimee, $target_dir, $allowedTypes, $upload_errors);
+
+    if (empty($upload_errors)) {
+      $policy = mysqli_query(
+        $con,
+        "SELECT 
         ppr.id,
         ppr.patient_id,
         ppr.case_id,
         ppr.remark_type,
         ppr.remark,
+        ppr.query_related_document,
         ppr.created_by,
         ppr.is_active,
         ppr.inserted_by,
         ppr.created_at,
         ppr.updated_at
-    FROM
-    patient_policy_remarks ppr
-    WHERE 
+                FROM
+                patient_policy_remarks ppr
+                WHERE 
         ppr.case_id = '$cid'"
-    );
+      );
 
-    $policy2 = mysqli_fetch_array($policy);
+      $policy2 = mysqli_fetch_array($policy);
 
-    if ($policy2 > 0) {
+      if ($policy2 > 0) {
 
-      $patient_id = $case->patient_id;
-      $case_id = $cid;
-      $remark_type = $_POST['remark_type'];
-      $remark = $_POST['remark'];
-      $is_active = $_POST['is_active'];
-      $created_by = $numId['id'];
-      $inserted_by = 'ADMIN';
-      $created_at = $currentTime;
-      $updated_at = $currentTime;
+        $patient_id = $case->patient_id;
+        $case_id = $cid;
+        $remark_type = $_POST['remark_type'];
+        $remark = $_POST['remark'];
+        $query_related_document = !empty($_FILES['query_related_document']['name']) ? $query_related_document : $policy2['query_related_document'];
+        // $is_active = $_POST['is_active'];
+        $created_by = $numId['id'];
+        $inserted_by = 'ADMIN';
+        $created_at = $currentTime;
+        $updated_at = $currentTime;
 
-      $policy3 =
-        mysqli_query($con, "INSERT INTO `patient_policy_remarks` 
-        (`patient_id`, `case_id`, `remark_type`, `remark`,`is_active`,`created_by`, `inserted_by`, `created_at`) 
+        $policy3 =
+          mysqli_query($con, "INSERT INTO `patient_policy_remarks` 
+        (`patient_id`, `case_id`, `remark_type`, `remark`,`query_related_document`,`is_active`,`created_by`, `inserted_by`, `created_at`) 
         VALUES 
-        ('$patient_id', '$case_id', '$remark_type', '$remark','1', '$created_by', '$inserted_by', '$created_at')");
+        ('$patient_id', '$case_id', '$remark_type', '$remark','$query_related_document','1', '$created_by', '$inserted_by', '$created_at')");
 
-      if ($policy3) {
-        echo "<script>
+        if ($policy3) {
+          echo "<script>
             window.addEventListener('load', function() {
                 Toast.fire({
                     icon: 'success',
@@ -1585,31 +1634,32 @@ if (strlen($_SESSION['id'] == 0)) {
                 }, 3000);
             });
         </script>";
-      }
-    } else {
+        }
+      } else {
 
 
-      $patient_id = $case->patient_id;
-      $case_id = $cid;
-      $remark_type = $_POST['remark_type'];
-      $remark = $_POST['remark'];
-      $created_by = $numId['id'];
-      $is_active = $_POST['is_active'];
-      $inserted_by = 'ADMIN';
-      $created_at = $currentTime;
-      $updated_at = $currentTime;
+        $patient_id = $case->patient_id;
+        $case_id = $cid;
+        $remark_type = $_POST['remark_type'];
+        $remark = $_POST['remark'];
+        $query_related_document = !empty($_FILES['query_related_document']['name']) ? $query_related_document : $_POST['query_related_document'];
+        $created_by = $numId['id'];
+        // $is_active = $_POST['is_active'];
+        $inserted_by = 'ADMIN';
+        $created_at = $currentTime;
+        $updated_at = $currentTime;
 
-      // $polciy4 = mysqli_query($con, "INSERT INTO `patient_policy_remarks` 
-      //   (`patient_id`, `case_id`, `remark_type`, `remark`,'is_active',`created_by`, `inserted_by`, `created_at`) 
-      //   VALUES 
-      //   ('$patient_id', '$case_id', '$remark_type', '$remark','1', '$created_by', '$inserted_by', '$created_at')");
-      $polciy4 = mysqli_query($con, "INSERT INTO `patient_policy_remarks` 
-        (`patient_id`, `case_id`, `remark_type`, `remark`,`is_active`, `created_at`) 
+        // $polciy4 = mysqli_query($con, "INSERT INTO `patient_policy_remarks` 
+        //   (`patient_id`, `case_id`, `remark_type`, `remark`,'is_active',`created_by`, `inserted_by`, `created_at`) 
+        //   VALUES 
+        //   ('$patient_id', '$case_id', '$remark_type', '$remark','1', '$created_by', '$inserted_by', '$created_at')");
+        $polciy4 = mysqli_query($con, "INSERT INTO `patient_policy_remarks` 
+        (`patient_id`, `case_id`, `remark_type`, `remark`,`query_related_document`,`is_active`, `created_at`) 
         VALUES 
-        ('$patient_id', '$case_id', '$remark_type', '$remark','1', '$created_at')");
+        ('$patient_id', '$case_id', '$remark_type', '$remark','$query_related_document','1', '$created_at')");
 
-      if ($polciy4) {
-        echo "<script>
+        if ($polciy4) {
+          echo "<script>
             window.addEventListener('load', function() {
                 Toast.fire({
                     icon: 'success',
@@ -1621,6 +1671,7 @@ if (strlen($_SESSION['id'] == 0)) {
                 }, 3000);
             });
         </script>";
+        }
       }
     }
   }
@@ -1994,6 +2045,419 @@ if (strlen($_SESSION['id'] == 0)) {
       }
     }
   }
+
+
+  if (isset($_POST['submit-patient-dispatch-details'])) {
+    // $target_dir = "uploads/";
+    $target_dir = "../uploads/";
+
+    if (!is_dir($target_dir)) {
+      mkdir($target_dir, 0777, true);
+    }
+
+    $currentTimee = date("YmdHis"); // Format timestamp as YearMonthDayHourMinuteSecond
+
+    $allowedTypes = array("pdf", "doc", "docx", "txt");
+
+    function handleFileUpload($file, $fieldName, $cid, $currentTimee, $target_dir, $allowedTypes, &$upload_errors)
+    {
+      $target_file = $target_dir . $cid . '_' . $fieldName . '_' . $currentTimee . '.' . strtolower(pathinfo($file["name"], PATHINFO_EXTENSION));
+      $fileType = strtolower(pathinfo($target_file, PATHINFO_EXTENSION));
+
+      if (!empty($file['name']) && in_array($fileType, $allowedTypes)) {
+        if (move_uploaded_file($file["tmp_name"], $target_file)) {
+          return $target_file;
+        } else {
+          $upload_errors[] = "Sorry, there was an error uploading your $fieldName.";
+          return null;
+        }
+      } else if (!empty($file['name'])) {
+        $upload_errors[] = "Sorry, only PDF, DOC, DOCX, and TXT files are allowed for $fieldName.";
+        return null;
+      }
+      return null;
+    }
+
+    $upload_errors = array();
+
+    $all_in_one_document = handleFileUpload($_FILES['all_in_one_document'], 'all_in_one_document', $cid, $currentTimee, $target_dir, $allowedTypes, $upload_errors);
+
+    $query_resolution_doc_dispatch = handleFileUpload($_FILES['query_resolution_doc_dispatch'], 'query_resolution_doc_dispatch', $cid, $currentTimee, $target_dir, $allowedTypes, $upload_errors);
+
+    if (empty($upload_errors)) {
+      $dispatch = mysqli_query(
+        $con,
+        "SELECT 
+                pddd.id,
+                pddd.patient_id,
+                pddd.case_id,
+                pddd.filedispatch_address,
+                pddd.all_in_one_document,
+                pddd.query_resolution_doc_dispatch,
+                pddd.created_by,
+                pddd.inserted_by,
+                pddd.created_at,
+                pddd.updated_at
+            FROM
+                patient_dispatch_details pddd
+            WHERE 
+                pddd.case_id = '$cid'"
+      );
+
+      $dispatch2 = mysqli_fetch_array($dispatch);
+
+      if ($dispatch2 > 0) {
+        $patient_id = $case->patient_id;
+        $case_id = $cid;
+        $filedispatch_address = $_POST['filedispatch_address'];
+
+        $all_in_one_document = !empty($_FILES['all_in_one_document']['name']) ? $all_in_one_document : $dispatch2['all_in_one_document'];
+
+        $query_resolution_doc_dispatch = !empty($_FILES['query_resolution_doc_dispatch']['name']) ? $query_resolution_doc_dispatch : $dispatch2['query_resolution_doc_dispatch'];
+
+        $created_by = $numId['id'];
+        $inserted_by = 'ADMIN';
+        $created_at = $currentTime;
+        $updated_at = $currentTime;
+
+        $dispatch3 = mysqli_query($con, "UPDATE patient_dispatch_details 
+                SET filedispatch_address='$filedispatch_address', 
+                    all_in_one_document='$all_in_one_document', 
+                    query_resolution_doc_dispatch='$query_resolution_doc_dispatch', 
+                    updated_at='$updated_at' 
+                WHERE case_id='$cid'");
+
+        if ($dispatch3) {
+          echo "<script>
+                    window.addEventListener('load', function() {
+                        Toast.fire({
+                            icon: 'success',
+                            title: 'Patient POD Details Updated Successfully.'
+                        });
+
+                        setTimeout(function(){
+                            window.location.href = `edit-case.php?id=$cid`;
+                        }, 3000);
+                    });
+                </script>";
+        }
+      } else {
+        $patient_id = $case->patient_id;
+        $case_id = $cid;
+        $filedispatch_address = $_POST['filedispatch_address'];
+        $all_in_one_document = !empty($_FILES['all_in_one_document']['name']) ? $all_in_one_document : $_POST['all_in_one_document'];
+        $query_resolution_doc_dispatch = !empty($_FILES['query_resolution_doc_dispatch']['name']) ? $query_resolution_doc_dispatch : $_POST['query_resolution_doc_dispatch'];
+        $created_by = $numId['id'];
+        $inserted_by = 'ADMIN';
+        $created_at = $currentTime;
+        $updated_at = $currentTime;
+
+        $dispatch4 = mysqli_query($con, "INSERT INTO `patient_dispatch_details` 
+                (`patient_id`, `case_id`, `filedispatch_address`, `all_in_one_document`, `query_resolution_doc_dispatch`, 
+                 `created_by`, `inserted_by`, `created_at`) 
+                VALUES 
+                ('$patient_id', '$case_id', '$filedispatch_address', '$all_in_one_document', '$query_resolution_doc_dispatch', '$created_by', '$inserted_by', '$created_at')");
+
+        if ($dispatch4) {
+          echo "<script>
+                    window.addEventListener('load', function() {
+                        Toast.fire({
+                            icon: 'success',
+                            title: 'Patient POD Details Added Successfully.'
+                        });
+
+                        setTimeout(function(){
+                            window.location.href = `edit-case.php?id=$cid`;
+                        }, 3000);
+                    });
+                </script>";
+        }
+      }
+    } else {
+      foreach ($upload_errors as $error) {
+        echo "<script>
+                window.addEventListener('load', function() {
+                    Toast.fire({
+                        icon: 'error',
+                        title: '$error'
+                    });
+                });
+            </script>";
+      }
+    }
+  }
+
+  if (isset($_POST['submit-patient-dispatch_detail-remark'])) {
+
+    $fileDispatch = mysqli_query(
+      $con,
+      "SELECT 
+        pfdr.id,
+        pfdr.patient_id,
+        pfdr.case_id,
+        pfdr.remark_type,
+        pfdr.remark,
+        pfdr.created_by,
+        pfdr.is_active,
+        pfdr.inserted_by,
+        pfdr.created_at,
+        pfdr.updated_at
+    FROM
+    patient_file_dispatch_remarks pfdr
+    WHERE 
+        pfdr.case_id = '$cid'"
+    );
+
+    $fileDispatch2 = mysqli_fetch_array($fileDispatch);
+
+    if ($fileDispatch2 > 0) {
+
+      $patient_id = $case->patient_id;
+      $case_id = $cid;
+      $remark_type = $_POST['remark_type'];
+      $remark = $_POST['remark'];
+      $created_by = $numId['id'];
+      $inserted_by = 'ADMIN';
+      $created_at = $currentTime;
+      $updated_at = $currentTime;
+
+      $fileDispatch3 =
+        mysqli_query($con, "INSERT INTO `patient_file_dispatch_remarks` 
+        (`patient_id`, `case_id`, `remark_type`, `remark`,`is_active`,`created_by`, `inserted_by`, `created_at`) 
+        VALUES 
+        ('$patient_id', '$case_id', '$remark_type', '$remark','1', '$created_by', '$inserted_by', '$created_at')");
+
+      if ($fileDispatch3) {
+        echo "<script>
+            window.addEventListener('load', function() {
+                Toast.fire({
+                    icon: 'success',
+                    title: 'DischargeRemark Remarks Added Successfully.'
+                });
+
+                setTimeout(function(){
+                    window.location.href = `edit-case.php?id=$cid`;
+                }, 3000);
+            });
+        </script>";
+      }
+    } else {
+
+
+      $patient_id = $case->patient_id;
+      $case_id = $cid;
+      $remark_type = $_POST['remark_type'];
+      $remark = $_POST['remark'];
+      $created_by = $numId['id'];
+      $inserted_by = 'ADMIN';
+      $created_at = $currentTime;
+      $updated_at = $currentTime;
+
+      $fileDispatch4 = mysqli_query($con, "INSERT INTO `patient_file_dispatch_remarks` 
+        (`patient_id`, `case_id`, `remark_type`, `remark`,`is_active`,`created_by`,`inserted_by`, `created_at`) 
+        VALUES 
+        ('$patient_id', '$case_id', '$remark_type', '$remark','1','$created_by','$inserted_by', '$created_at')");
+
+      if ($fileDispatch4) {
+        echo "<script>
+            window.addEventListener('load', function() {
+                Toast.fire({
+                    icon: 'success',
+                    title: 'Discharge Remark Added Successfully.'
+                });
+
+                setTimeout(function(){
+                    window.location.href = `edit-case.php?id=$cid`;
+                }, 3000);
+            });
+        </script>";
+      }
+    }
+  }
+
+  if (isset($_POST['submit-patient-kyc-details'])) {
+    // $target_dir = "uploads/";
+    $target_dir = "../uploads/";
+
+    if (!is_dir($target_dir)) {
+      mkdir($target_dir, 0777, true);
+    }
+
+    $currentTimee = date("YmdHis"); // Format timestamp as YearMonthDayHourMinuteSecond
+
+    $allowedTypes = array("pdf", "doc", "docx", "txt");
+
+    function handleFileUpload($file, $fieldName, $cid, $currentTimee, $target_dir, $allowedTypes, &$upload_errors)
+    {
+      $target_file = $target_dir . $cid . '_' . $fieldName . '_' . $currentTimee . '.' . strtolower(pathinfo($file["name"], PATHINFO_EXTENSION));
+      $fileType = strtolower(pathinfo($target_file, PATHINFO_EXTENSION));
+
+      if (!empty($file['name']) && in_array($fileType, $allowedTypes)) {
+        if (move_uploaded_file($file["tmp_name"], $target_file)) {
+          return $target_file;
+        } else {
+          $upload_errors[] = "Sorry, there was an error uploading your $fieldName.";
+          return null;
+        }
+      } else if (!empty($file['name'])) {
+        $upload_errors[] = "Sorry, only PDF, DOC, DOCX, and TXT files are allowed for $fieldName.";
+        return null;
+      }
+      return null;
+    }
+
+    $upload_errors = array();
+
+    $patient_adhaar_card = handleFileUpload($_FILES['patient_adhaar_card'], 'patient_adhaar_card', $cid, $currentTimee, $target_dir, $allowedTypes, $upload_errors);
+
+    $patient_insurance_card = handleFileUpload($_FILES['patient_insurance_card'], 'patient_insurance_card', $cid, $currentTimee, $target_dir, $allowedTypes, $upload_errors);
+
+    $primary_insured_adhaar = handleFileUpload($_FILES['primary_insured_adhaar'], 'primary_insured_adhaar', $cid, $currentTimee, $target_dir, $allowedTypes, $upload_errors);
+
+    $primary_insured_insurance = handleFileUpload($_FILES['primary_insured_insurance'], 'primary_insured_insurance', $cid, $currentTimee, $target_dir, $allowedTypes, $upload_errors);
+
+    $primary_insured_pan = handleFileUpload($_FILES['primary_insured_pan'], 'primary_insured_pan', $cid, $currentTimee, $target_dir, $allowedTypes, $upload_errors);
+
+    $doctor_prescription = handleFileUpload($_FILES['doctor_prescription'], 'doctor_prescription', $cid, $currentTimee, $target_dir, $allowedTypes, $upload_errors);
+
+    $reports = handleFileUpload($_FILES['reports'], 'reports', $cid, $currentTimee, $target_dir, $allowedTypes, $upload_errors);
+    $past_treatment_record = handleFileUpload($_FILES['past_treatment_record'], 'past_treatment_record', $cid, $currentTimee, $target_dir, $allowedTypes, $upload_errors);
+
+    if (empty($upload_errors)) {
+      $kyc = mysqli_query(
+        $con,
+        "SELECT 
+                pkd.id,
+                pkd.patient_id,
+                pkd.case_id,
+                pkd.doctor_prescription,
+                pkd.reports,
+                pkd.past_treatment_record,
+                pkd.patient_adhaar_card,
+                pkd.patient_insurance_card,
+                pkd.primary_insured_adhaar,
+                pkd.primary_insured_insurance,
+                pkd.primary_insured_pan,
+                pkd.created_by,
+                pkd.inserted_by,
+                pkd.created_at,
+                pkd.updated_at
+            FROM
+                patient_kyc_details pkd
+            WHERE 
+                pkd.case_id = '$cid'"
+      );
+
+      $kyc2 = mysqli_fetch_array($kyc);
+
+      if ($kyc2 > 0) {
+        $patient_id = $case->patient_id;
+        $case_id = $cid;
+
+        $doctor_prescription = !empty($_FILES['doctor_prescription']['name']) ? $doctor_prescription : $kyc2['doctor_prescription'];
+        $reports = !empty($_FILES['reports']['name']) ? $reports : $kyc2['reports'];
+        $past_treatment_record = !empty($_FILES['past_treatment_record']['name']) ? $past_treatment_record : $kyc2['past_treatment_record'];
+
+        $patient_adhaar_card = !empty($_FILES['patient_adhaar_card']['name']) ? $patient_adhaar_card : $kyc2['patient_adhaar_card'];
+
+        $patient_insurance_card = !empty($_FILES['patient_insurance_card']['name']) ? $patient_insurance_card : $kyc2['patient_insurance_card'];
+
+        $primary_insured_adhaar = !empty($_FILES['primary_insured_adhaar']['name']) ? $primary_insured_adhaar : $kyc2['primary_insured_adhaar'];
+
+        $primary_insured_insurance = !empty($_FILES['primary_insured_insurance']['name']) ? $primary_insured_insurance : $kyc2['primary_insured_insurance'];
+
+        $primary_insured_pan = !empty($_FILES['primary_insured_pan']['name']) ? $primary_insured_pan : $kyc2['primary_insured_pan'];
+
+        $created_by = $numId['id'];
+        $inserted_by = 'ADMIN';
+        $created_at = $currentTime;
+        $updated_at = $currentTime;
+
+        $kyc3 = mysqli_query($con, "UPDATE patient_kyc_details 
+                SET 
+                    doctor_prescription='$doctor_prescription', 
+                    reports='$reports', 
+                    past_treatment_record='$past_treatment_record', 
+                    patient_adhaar_card='$patient_adhaar_card', 
+                    patient_insurance_card='$patient_insurance_card', 
+                    primary_insured_adhaar='$primary_insured_adhaar', 
+                    primary_insured_insurance='$primary_insured_insurance', 
+                    primary_insured_pan='$primary_insured_pan', 
+                    updated_at='$updated_at' 
+                WHERE case_id='$cid'");
+
+        if ($kyc3) {
+          echo "<script>
+                    window.addEventListener('load', function() {
+                        Toast.fire({
+                            icon: 'success',
+                            title: 'Patient POD Details Updated Successfully.'
+                        });
+
+                        setTimeout(function(){
+                            window.location.href = `edit-case.php?id=$cid`;
+                        }, 3000);
+                    });
+                </script>";
+        }
+      } else {
+        $patient_id = $case->patient_id;
+        $case_id = $cid;
+
+
+        $doctor_prescription = !empty($_FILES['doctor_prescription']['name']) ? $doctor_prescription : $_POST['doctor_prescription'];
+        $reports = !empty($_FILES['reports']['name']) ? $reports : $_POST['reports'];
+        $past_treatment_record = !empty($_FILES['past_treatment_record']['name']) ? $past_treatment_record : $_POST['past_treatment_record'];
+        $patient_adhaar_card = !empty($_FILES['patient_adhaar_card']['name']) ? $patient_adhaar_card : $_POST['patient_adhaar_card'];
+
+        $patient_insurance_card = !empty($_FILES['patient_insurance_card']['name']) ? $patient_insurance_card : $_POST['patient_insurance_card'];
+
+        $primary_insured_adhaar = !empty($_FILES['primary_insured_adhaar']['name']) ? $primary_insured_adhaar : $_POST['primary_insured_adhaar'];
+
+        $primary_insured_insurance = !empty($_FILES['primary_insured_insurance']['name']) ? $primary_insured_insurance : $_POST['primary_insured_insurance'];
+
+        $primary_insured_pan = !empty($_FILES['primary_insured_pan']['name']) ? $primary_insured_pan : $_POST['primary_insured_pan'];
+
+        $created_by = $numId['id'];
+        $inserted_by = 'ADMIN';
+        $created_at = $currentTime;
+        $updated_at = $currentTime;
+
+        $dispatch4 = mysqli_query($con, "INSERT INTO `patient_kyc_details` 
+                (`patient_id`, `case_id`,`doctor_prescription`,`reports`,`past_treatment_record`, `patient_adhaar_card`, `patient_insurance_card`, `primary_insured_adhaar`,`primary_insured_insurance`,`primary_insured_pan`, 
+                 `created_by`, `inserted_by`, `created_at`) 
+                VALUES 
+                ('$patient_id', '$case_id','$doctor_prescription','$reports','$past_treatment_record', '$patient_adhaar_card', '$patient_insurance_card', '$primary_insured_adhaar','$primary_insured_insurance','$primary_insured_pan', '$created_by', '$inserted_by', '$created_at')");
+
+        if ($dispatch4) {
+          echo "<script>
+                    window.addEventListener('load', function() {
+                        Toast.fire({
+                            icon: 'success',
+                            title: 'Patient Documents Details Added Successfully.'
+                        });
+
+                        setTimeout(function(){
+                            window.location.href = `edit-case.php?id=$cid`;
+                        }, 3000);
+                    });
+                </script>";
+        }
+      }
+    } else {
+      foreach ($upload_errors as $error) {
+        echo "<script>
+                window.addEventListener('load', function() {
+                    Toast.fire({
+                        icon: 'error',
+                        title: '$error'
+                    });
+                });
+            </script>";
+      }
+    }
+  }
+
 ?>
   <!DOCTYPE html>
   <html lang="en">
@@ -2204,6 +2668,121 @@ if (strlen($_SESSION['id'] == 0)) {
                         </div>
                         <div>
                           <button type="submit" name="submit-patient-status" class="btn btn-danger">Submit</button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Primary Insured KYC -->
+              <div class="col-md-12" id="pod">
+                <div class="card">
+                  <div class="card-header">
+                    <h3 class="card-title">KYC</h3>
+                  </div>
+                  <div class="card-body">
+                    <div class="tab-content">
+                      <form class="form-horizontal" method="post" enctype="multipart/form-data">
+
+                        <h4>Patient KYC</h4>
+                        <hr>
+                        <div class="form-group row">
+
+                          <div class="col-md-6">
+                            <label for="patient_adhaar_card">Patient Adhaar Card</label>
+                            <div>
+                              <input type="file" class="form-control" value="<?php echo ($case->patient_adhaar_card) ?>" id="patient_adhaar_card" name="patient_adhaar_card" placeholder="Patient Adhaar Card" accept=".pdf,.doc,.docx,.txt">
+                              <span><a target="_blank" href="<?php echo ($case->patient_adhaar_card) ?>"><?php echo substr($case->patient_adhaar_card, 8); ?></a></span>
+                            </div>
+                          </div>
+                          <div class="col-md-6">
+                            <label for="patient_insurance_card">Patient Insurance Card</label>
+                            <div>
+                              <input type="file" class="form-control" value="<?php echo ($case->patient_insurance_card) ?>" id="patient_insurance_card" name="patient_insurance_card" placeholder="Primary Insured Insurance Card" accept=".pdf,.doc,.docx,.txt">
+                              <span><a target="_blank" href="<?php echo ($case->patient_insurance_card) ?>"><?php echo substr($case->patient_insurance_card, 8); ?></a></span>
+                            </div>
+                          </div>
+                        </div>
+                        <hr>
+                        <h4>Past Treatment Record</h4>
+                        <hr>
+                        <div class="form-group row">
+                          <div class="col-md-4">
+                            <label for="doctor_prescription">Doctor Prescription</label>
+                            <div>
+                              <input type="file" class="form-control" value="<?php echo ($case->doctor_prescription) ?>" id="doctor_prescription" name="doctor_prescription" placeholder="Doctor Prescription" accept=".pdf,.doc,.docx,.txt">
+                              <span><a target="_blank" href="<?php echo ($case->doctor_prescription) ?>"><?php echo substr($case->doctor_prescription, 8); ?></a></span>
+                            </div>
+                          </div>
+                          <div class="col-md-4">
+                            <label for="reports">Reports</label>
+                            <div>
+                              <input type="file" class="form-control" value="<?php echo ($case->reports) ?>" id="reports" name="reports" placeholder="Reports" accept=".pdf,.doc,.docx,.txt">
+                              <span><a target="_blank" href="<?php echo ($case->reports) ?>"><?php echo substr($case->reports, 8); ?></a></span>
+                            </div>
+                          </div>
+                          <div class="col-md-4">
+                            <label for="past_treatment_record">Past Treatment Records</label>
+                            <div>
+                              <input type="file" class="form-control" value="<?php echo ($case->past_treatment_record) ?>" id="past_treatment_record" name="past_treatment_record" placeholder="Past Treatment Records" accept=".pdf,.doc,.docx,.txt">
+                              <span><a target="_blank" href="<?php echo ($case->past_treatment_record) ?>"><?php echo substr($case->past_treatment_record, 8); ?></a></span>
+                            </div>
+                          </div>
+                        </div>
+                        <hr>
+                        <h4>Primary Insured KYC</h4>
+                        <hr>
+                        <div class="form-group row">
+                          <div class="col-md-4">
+                            <label for="primary_insured_adhaar">Primary Insured Adhaar Card</label>
+                            <div>
+                              <input type="file" class="form-control" value="<?php echo ($case->primary_insured_adhaar) ?>" id="primary_insured_adhaar" name="primary_insured_adhaar" placeholder="Primary Insured Adhaar Card" accept=".pdf,.doc,.docx,.txt">
+                              <span><a target="_blank" href="<?php echo ($case->primary_insured_adhaar) ?>"><?php echo substr($case->primary_insured_adhaar, 8); ?></a></span>
+                            </div>
+                          </div>
+                          <div class="col-md-4">
+                            <label for="primary_insured_insurance">Primary Insured Insurance Card</label>
+                            <div>
+                              <input type="file" class="form-control" value="<?php echo ($case->primary_insured_insurance) ?>" id="primary_insured_insurance" name="primary_insured_insurance" placeholder="Primary Insured Insurance Card" accept=".pdf,.doc,.docx,.txt">
+                              <span><a target="_blank" href="<?php echo ($case->primary_insured_insurance) ?>"><?php echo substr($case->primary_insured_insurance, 8); ?></a></span>
+                            </div>
+                          </div>
+                          <div class="col-md-4">
+                            <label for="primary_insured_pan">Primary Insured PAN Card</label>
+                            <div>
+                              <input type="file" class="form-control" value="<?php echo ($case->primary_insured_pan) ?>" id="primary_insured_pan" name="primary_insured_pan" placeholder="Primary Insured PAN Card" accept=".pdf,.doc,.docx,.txt">
+                              <span><a target="_blank" href="<?php echo ($case->primary_insured_pan) ?>"><?php echo substr($case->primary_insured_pan, 8); ?></a></span>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="form-group row">
+                          <div class="col-md-12">
+                            <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#modal-default-primary-insured-kyc" style="margin-top: 10px;">
+                              Submit
+                            </button>
+                          </div>
+                          <div class="modal fade" id="modal-default-primary-insured-kyc">
+                            <div class="modal-dialog">
+                              <div class="modal-content">
+                                <div class="modal-header">
+                                  <h4 class="modal-title">Primary Insured KYC Creation/Updation!</h4>
+                                  <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                    <span aria-hidden="true">&times;</span>
+                                  </button>
+                                </div>
+                                <div class="modal-body">
+                                  <p>Are you sure you want to create/update Primary Insured KYC?</p>
+                                </div>
+                                <div class="modal-footer justify-content-between">
+                                  <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                                  <button type="submit" name="submit-patient-kyc-details" class="btn btn-danger">Submit</button>
+                                </div>
+                              </div>
+                              <!-- /.modal-content -->
+                            </div>
+                            <!-- /.modal-dialog -->
+                          </div>
                         </div>
                       </form>
                     </div>
@@ -2499,16 +3078,23 @@ if (strlen($_SESSION['id'] == 0)) {
                     <div class="tab-content">
                       <form class="form-horizontal" method="post" enctype="multipart/form-data">
                         <div class="form-group row">
-                          <div class="col-md-6">
+                          <div class="col-md-4">
                             <label for="remarkType">Remark Type</label>
                             <div>
                               <input type="text" class="form-control" value="<?php echo ($case->remark_type) ?>" id="remarkType" name="remark_type" placeholder="Remark Type">
                             </div>
                           </div>
-                          <div class="col-md-6">
+                          <div class="col-md-4">
                             <label for="remark">Remark</label>
                             <div>
                               <textarea class="form-control" name="remark" id="remark" placeholder="Remark"><?php echo ($case->remark) ?></textarea>
+                            </div>
+                          </div>
+                          <div class="col-md-4">
+                            <label for="query_related_document">Query Related Document</label>
+                            <div>
+                              <input type="file" class="form-control" value="<?php echo ($case->query_related_document) ?>" id="query_related_document" name="query_related_document" placeholder="Query Related Document" accept=".pdf,.doc,.docx,.txt">
+                              <span><a target="_blank" href="<?php echo ($case->query_related_document) ?>"><?php echo substr($case->query_related_document, 8); ?></a></span>
                             </div>
                           </div>
 
@@ -2516,11 +3102,11 @@ if (strlen($_SESSION['id'] == 0)) {
 
                         <div class="form-group row">
                           <div class="col-md-12">
-                            <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#modal-default-12" style="margin-top: 10px;">
+                            <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#modal-default-16" style="margin-top: 10px;">
                               Submit
                             </button>
                           </div>
-                          <div class="modal fade" id="modal-default-12">
+                          <div class="modal fade" id="modal-default-16">
                             <div class="modal-dialog">
                               <div class="modal-content">
                                 <div class="modal-header">
@@ -2556,6 +3142,9 @@ if (strlen($_SESSION['id'] == 0)) {
                             <th style="width: 25%">
                               Remark
                             </th>
+                            <th style="width: 25%">
+                              Doc
+                            </th>
                             <th style="width: 20%">
                               Author
                             </th>
@@ -2575,6 +3164,7 @@ if (strlen($_SESSION['id'] == 0)) {
                     ppr.case_id,
                     ppr.remark_type,
                     ppr.remark,
+                    ppr.query_related_document,
                     ppr.is_active,
                     ppr.inserted_by,
                     ppr.created_at,
@@ -2596,6 +3186,9 @@ if (strlen($_SESSION['id'] == 0)) {
                               </td>
                               <td>
                                 <?php echo $row['remark'] ?>
+                              </td>
+                              <td>
+                                <a href="<?php echo $row['query_related_document'] ?>" target="_blank"> <?php echo $row['query_related_document'] ?></a>
                               </td>
                               <td>
                                 <?php echo $row['inserted_by'] ?>
@@ -3897,7 +4490,207 @@ if (strlen($_SESSION['id'] == 0)) {
                 </div>
               </div>
 
+              <!-- File Dispatch -->
+              <div class="col-md-12" id="pod">
+                <div class="card">
+                  <div class="card-header">
+                    <h3 class="card-title">File Dispatch</h3>
+                  </div>
+                  <div class="card-body">
+                    <div class="tab-content">
+                      <form class="form-horizontal" method="post" enctype="multipart/form-data">
+                        <div class="form-group row">
+                          <div class="col-md-12">
+                            <label for="filedispatch_address">Address</label>
+                            <div>
+                              <textarea class="form-control" name="filedispatch_address" id="filedispatch_address" placeholder="Address"><?php echo ($case->filedispatch_address) ?></textarea>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="form-group row">
+                          <div class="col-md-6">
+                            <label for="all_in_one_document">All In One Document</label>
+                            <div>
+                              <input type="file" class="form-control" value="<?php echo ($case->all_in_one_document) ?>" id="all_in_one_document" name="all_in_one_document" placeholder="All In One Document" accept=".pdf,.doc,.docx,.txt">
+                              <span><a target="_blank" href="<?php echo ($case->all_in_one_document) ?>"><?php echo substr($case->all_in_one_document, 8); ?></a></span>
+                            </div>
+                          </div>
+                          <div class="col-md-6">
+                            <label for="query_resolution_doc_dispatch">Query Resolution Doc</label>
+                            <div>
+                              <input type="file" class="form-control" value="<?php echo ($case->query_resolution_doc_dispatch) ?>" id="query_resolution_doc_dispatch" name="query_resolution_doc_dispatch" placeholder="Query Resolution Document" accept=".pdf,.doc,.docx,.txt">
+                              <span><a target="_blank" href="<?php echo ($case->query_resolution_doc_dispatch) ?>"><?php echo substr($case->query_resolution_doc_dispatch, 8); ?></a></span>
+                            </div>
+                          </div>
+                        </div>
 
+                        <div class="form-group row">
+                          <div class="col-md-12">
+                            <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#modal-default-15" style="margin-top: 10px;">
+                              Submit
+                            </button>
+                          </div>
+                          <div class="modal fade" id="modal-default-15">
+                            <div class="modal-dialog">
+                              <div class="modal-content">
+                                <div class="modal-header">
+                                  <h4 class="modal-title">Dispatch Details Creation/Updation!</h4>
+                                  <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                    <span aria-hidden="true">&times;</span>
+                                  </button>
+                                </div>
+                                <div class="modal-body">
+                                  <p>Are you sure you want to create/update Dispatch Details?</p>
+                                </div>
+                                <div class="modal-footer justify-content-between">
+                                  <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                                  <button type="submit" name="submit-patient-dispatch-details" class="btn btn-danger">Submit</button>
+                                </div>
+                              </div>
+                              <!-- /.modal-content -->
+                            </div>
+                            <!-- /.modal-dialog -->
+                          </div>
+                        </div>
+                      </form>
+
+                      <div class="col-md-12" id="policy-remarks">
+                        <div class="card">
+                          <div class="card-header">
+                            <h3 class="card-title">File Dispatch Details Remarks</h3>
+                          </div>
+                          <div class="card-body">
+                            <div class="tab-content">
+                              <form class="form-horizontal" method="post" enctype="multipart/form-data">
+                                <div class="form-group row">
+                                  <div class="col-md-6">
+                                    <label for="remarkType">File Dispatch Remark Type</label>
+                                    <div>
+                                      <input type="text" class="form-control" value="<?php echo ($case->remark_type) ?>" id="remarkType" name="remark_type" placeholder="Remark Type">
+                                    </div>
+                                  </div>
+                                  <div class="col-md-6">
+                                    <label for="remark">File Dispatch Remark</label>
+                                    <div>
+                                      <textarea class="form-control" name="remark" id="remark" placeholder="Remark"><?php echo ($case->remark) ?></textarea>
+                                    </div>
+                                  </div>
+
+                                </div>
+
+                                <div class="form-group row">
+                                  <div class="col-md-12">
+                                    <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#modal-default-file-dispatch" style="margin-top: 10px;">
+                                      Submit
+                                    </button>
+                                  </div>
+                                  <div class="modal fade" id="modal-default-file-dispatch">
+                                    <div class="modal-dialog">
+                                      <div class="modal-content">
+                                        <div class="modal-header">
+                                          <h4 class="modal-title">File Dispatch Remark Creation/Updation!</h4>
+                                          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                            <span aria-hidden="true">&times;</span>
+                                          </button>
+                                        </div>
+                                        <div class="modal-body">
+                                          <p>Are you sure you want to Enter File Dispatch Remark Details?</p>
+                                        </div>
+                                        <div class="modal-footer justify-content-between">
+                                          <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                                          <button type="submit" name="submit-patient-dispatch_detail-remark" class="btn btn-danger">Submit</button>
+                                        </div>
+                                      </div>
+                                      <!-- /.modal-content -->
+                                    </div>
+                                    <!-- /.modal-dialog -->
+                                  </div>
+                                </div>
+                              </form>
+
+                              <table class="table table-striped projects">
+                                <thead>
+                                  <tr>
+                                    <th style="width: 10%">
+                                      Sr No.
+                                    </th>
+                                    <th style="width: 10%">
+                                      Remark Type
+                                    </th>
+                                    <th style="width: 25%">
+                                      Remark
+                                    </th>
+                                    <th style="width: 20%">
+                                      Author
+                                    </th>
+                                    <th style="width: 20%">
+                                      Date Time
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  <?php
+
+
+                                  $sql = mysqli_query(
+                                    $con,
+                                    "SELECT 
+                                      pfdr.id,
+                                      pfdr.case_id,
+                                      pfdr.remark_type,
+                                      pfdr.remark,
+                                      pfdr.is_active,
+                                      pfdr.inserted_by,
+                                      pfdr.created_at,
+                                      pfdr.inserted_by
+                                      FROM 
+                                          patient_file_dispatch_remarks pfdr 
+                                      WHERE 
+                                          pfdr.is_active = 1 AND pfdr.case_id=$cid"
+                                  );
+                                  $cnt = 1;
+                                  while ($row = mysqli_fetch_array($sql)) {
+                                  ?>
+                                    <tr>
+                                      <td>
+                                        <?php echo ($cnt) ?>
+                                      </td>
+                                      <td>
+                                        <?php echo $row['remark_type'] ?>
+                                      </td>
+                                      <td>
+                                        <?php echo $row['remark'] ?>
+                                      </td>
+                                      <td>
+                                        <?php echo $row['inserted_by'] ?>
+                                      </td>
+
+                                      <td>
+                                        <?php echo $row['created_at'] ?>
+                                      </td>
+                                      <td class="project-actions text-right">
+
+                                        <!-- <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#policy-edit-default-<?php echo $row['id']; ?>" style="margin-top: 10px;">
+                                              Edit
+                                            </button>
+                                            <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#policy-delete-default-<?php echo $row['id']; ?>" style="margin-top: 10px;">
+                                              Delete
+                                            </button> -->
+                                      </td>
+                                    </tr>
+                                  <?php
+                                    $cnt = $cnt + 1;
+                                  } ?>
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
             </div>
           </div>
