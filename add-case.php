@@ -494,11 +494,11 @@ if (strlen($_SESSION['id'] == 0)) {
         // Define options for each case type
         var cashTypeOptions = {
           '1': [{
-              value: 'pdc',
+              value: 'PDC',
               text: 'PDC'
             },
             {
-              value: 'loan',
+              value: 'Loan',
               text: 'Loan'
             }
           ],

@@ -29,7 +29,7 @@ if (strlen($_SESSION['id'] == 0)) {
                             pci.status,
                             h.id AS hospital_id,
                             h.name AS hospital_name,
-                            d.id AS doctor_id,
+                            d.id,
                             d.first_name AS doctor_first_name,
                             d.last_name AS doctor_last_name,
                             pld.primary_card_holder_name,
@@ -98,7 +98,9 @@ if (strlen($_SESSION['id'] == 0)) {
                             ppd.nbfc,
                             ppd.sanction_number,
                             ppd.loan_booked_to,
-                            p.loan_type AS case_type,
+                            pci.loan_type AS case_type,
+                            pci.cash_type,
+                            pci.treatment_type,
                             tpa.tpa_address,
                             tpaa.tpa_address AS tpa_address_insurrance
                             FROM patient_cases_info pci
@@ -206,30 +208,53 @@ if (strlen($_SESSION['id'] == 0)) {
     if (!is_dir($target_dir)) {
       mkdir($target_dir, 0777, true);
     }
+
     $currentTimee = date("YmdHis"); // Format timestamp as YearMonthDayHourMinuteSecond
 
-    $intimation_file = $_FILES['intimation_document'];
-    $intimation_target_file = $target_dir . $cid . '_intimation_document_' . $currentTimee . '.' . strtolower(pathinfo($intimation_file["name"], PATHINFO_EXTENSION));
-    $intimation_fileType = strtolower(pathinfo($intimation_target_file, PATHINFO_EXTENSION));
+    $intimation_files = $_FILES['intimation_document'];
     $allowedTypes = array("pdf", "doc", "docx", "txt");
 
     $upload_errors = array();
+    // $intimation_fileType = strtolower(pathinfo($intimation_target_file, PATHINFO_EXTENSION));
+    $intimation_fileType = array();
 
-    if (!empty($intimation_file['name']) && !in_array($intimation_fileType, $allowedTypes)) {
-      $upload_errors[] = "Sorry, only PDF, DOC, DOCX, and TXT files are allowed for Intimation Document.";
-    }
-
-    if (empty($upload_errors)) {
-      if (!empty($intimation_file['name'])) {
-        if (move_uploaded_file($intimation_file["tmp_name"], $intimation_target_file)) {
-          $intimation_filePath = $con->real_escape_string($intimation_target_file);
+    foreach ($intimation_files['name'] as $key => $fileName) {
+      if (!empty($fileName)) {
+        $fileType = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+        if (!in_array($fileType, $allowedTypes)) {
+          $upload_errors[] = "Sorry, only PDF, DOC, DOCX, and TXT files are allowed for Intimation Document.";
         } else {
-          $upload_errors[] = "Sorry, there was an error uploading your Intimation Document.";
+          $target_file = $target_dir . $cid . '_intimation_document_' . $currentTimee . '_' . $key . '.' . $fileType;
+          if (move_uploaded_file($intimation_files["tmp_name"][$key], $target_file)) {
+            $intimation_filePaths[] = $con->real_escape_string($target_file);
+          } else {
+            $upload_errors[] = "Sorry, there was an error uploading your Intimation Document.";
+          }
         }
       }
     }
 
+    // $intimation_target_file = $target_dir . $cid . '_intimation_document_' . $currentTimee . '.' . strtolower(pathinfo($intimation_file["name"], PATHINFO_EXTENSION));
+
+
+    // if (!empty($intimation_file['name']) && !in_array($intimation_fileType, $allowedTypes)) {
+    //   $upload_errors[] = "Sorry, only PDF, DOC, DOCX, and TXT files are allowed for Intimation Document.";
+    // }
+
+    // if (empty($upload_errors)) {
+    //   if (!empty($intimation_file['name'])) {
+    //     if (move_uploaded_file($intimation_file["tmp_name"], $intimation_target_file)) {
+    //       $intimation_filePath = $con->real_escape_string($intimation_target_file);
+    //     } else {
+    //       $upload_errors[] = "Sorry, there was an error uploading your Intimation Document.";
+    //     }
+    //   }
+    // }
+
     if (empty($upload_errors)) {
+
+      $intimation_documents = implode(',', $intimation_filePaths);
+
       $reimburse = mysqli_query(
         $con,
         "SELECT 
@@ -256,7 +281,8 @@ if (strlen($_SESSION['id'] == 0)) {
         $case_id = $cid;
         $admission_date = $_POST['admission_date'];
         $intimation_number = $_POST['intimation_number'];
-        $intimation_document = !empty($intimation_file['name']) ? $intimation_target_file : $reimburse2['intimation_document'];
+        // $intimation_document = !empty($intimation_file['name']) ? $intimation_target_file : $reimburse2['intimation_document'];
+        $intimation_document = !empty($intimation_filePaths) ? $intimation_documents : $reimburse2['intimation_document'];
         $created_by = $numId['id'];
         $inserted_by = 'ADMIN';
         $created_at = $currentTime;
@@ -288,7 +314,8 @@ if (strlen($_SESSION['id'] == 0)) {
         $case_id = $cid;
         $admission_date = $_POST['admission_date'];
         $intimation_number = $_POST['intimation_number'];
-        $intimation_document = !empty($intimation_file['name']) ? $intimation_target_file : '';
+        // $intimation_document = !empty($intimation_file['name']) ? $intimation_target_file : '';
+        $intimation_document = !empty($intimation_filePaths) ? $intimation_documents : $reimburse2['intimation_document'];
         $created_by = $numId['id'];
         $inserted_by = 'ADMIN';
         $created_at = $currentTime;
@@ -2033,6 +2060,56 @@ if (strlen($_SESSION['id'] == 0)) {
       });
     </script>
 
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <style>
+      .file-upload {
+        position: relative;
+        overflow: hidden;
+        display: inline-block;
+      }
+
+      .file-upload input[type="file"] {
+        position: absolute;
+        top: 0;
+        right: 0;
+        margin: 0;
+        padding: 0;
+        font-size: 20px;
+        cursor: pointer;
+        opacity: 0;
+        filter: alpha(opacity=0);
+      }
+
+      .file-upload .btn {
+        display: inline-block;
+        background-color: #007bff;
+        color: white;
+        padding: 8px 20px;
+        font-size: 16px;
+        cursor: pointer;
+        border-radius: 4px;
+      }
+
+      .file-list {
+        margin-top: 10px;
+      }
+
+      .file-list .file-item {
+        display: flex;
+        align-items: center;
+        margin-bottom: 5px;
+      }
+
+      .file-list .file-item i {
+        margin-right: 10px;
+      }
+
+      .file-list .file-item a {
+        color: #007bff;
+        text-decoration: none;
+      }
+    </style>
+
   </head>
 
   <body class="hold-transition sidebar-mini">
@@ -2144,15 +2221,26 @@ if (strlen($_SESSION['id'] == 0)) {
                     <div class="tab-content">
                       <form class="form-horizontal" method="post">
                         <div class="form-group row">
-                          <div class="col-md-4">
-                            <label for="case_type">Case Type</label>
+                          <div class="col-md-2">
+                            <label for="case_type">Finance Type</label>
                             <select disabled class="form-control select2" name="case_type" id="case_type" style="width: 100%;">
                               <option disabled <?php if (!$case->case_type) echo 'selected="selected"'; ?>>Select is Case Type</option>
-                              <option disabled value="1" <?php if ($case->case_type == '2') echo 'selected="selected"'; ?>>Cashless</option>
-                              <option disabled value="2" <?php if ($case->case_type == '1') echo 'selected="selected"'; ?>>Reimbursement</option>
+                              <option disabled value="1" <?php if ($case->case_type == '1') echo 'selected="selected"'; ?>>Reimbursement</option>
+                              <option disabled value="2" <?php if ($case->case_type == '2') echo 'selected="selected"'; ?>>Cashless</option>
                               <option disabled value="3" <?php if ($case->case_type == '3') echo 'selected="selected"'; ?>>Asthetic</option>
                             </select>
                           </div>
+                          <?php if ($case->case_type  == '1') : ?>
+                            <div class="col-md-2">
+                              <label for="case_type">Loan Type</label>
+                              <select disabled class="form-control select2" name="case_type" id="case_type" style="width: 100%;">
+                                <option disabled <?php if (!$case->cash_type) echo 'selected="selected"'; ?>>Select is Loan Type</option>
+                                <option disabled value="PDC" <?php if ($case->cash_type == 'PDC') echo 'selected="selected"'; ?>>PDC</option>
+                                <option disabled value="Loan" <?php if ($case->cash_type == 'Loan') echo 'selected="selected"'; ?>>Loan</option>
+                              </select>
+                            </div>
+                          <?php endif; ?>
+
                           <div class="col-md-4">
                             <label for="hospital">Hospital</label>
                             <select class="form-control select2" name="hospital" id="inputHospital">
@@ -2169,18 +2257,7 @@ if (strlen($_SESSION['id'] == 0)) {
                           </div>
                           <div class="col-md-4">
                             <label for="doctor">Doctor</label>
-                            <select class="form-control select2" name="doctor" id="inputDoctor">
-                              <option value="<?php echo ($case->doctor_id) ?>"><?php echo ($case->doctor_first_name) ?> <?php echo ($case->doctor_last_name) ?> - <?php echo ($case->hospital_name) ?></option>
-                              <?php
-                              $doctors = mysqli_query($con, "SELECT d.id,d.hospital_id,d.first_name,d.last_name,h.name FROM doctors d JOIN hospitals h ON d.hospital_id = h.id");
-                              while ($row = mysqli_fetch_array($doctors)) {
-                              ?>
-                                <option value="<?php echo htmlentities($row['id']); ?>">
-                                  <?php echo htmlentities($row['first_name']); ?> <?php echo htmlentities($row['last_name']); ?> - <?php echo htmlentities($row['name']); ?>
-                                </option>
-                              <?php } ?>
-                              <option value="999">None</option>
-                            </select>
+                            <input type="text" value="<?php echo ($case->doctor_id) ?>" class="form-control" name="doctor_id" id="inputdoctor" placeholder="Hospital Case ID No.">
                           </div>
                         </div>
                         <div class="form-group row">
@@ -2284,14 +2361,25 @@ if (strlen($_SESSION['id'] == 0)) {
 
                         </div>
                         <div class="form-group row">
-                          <div class="col-md-6">
-                            <label for="intimation_document">Intimation Document</label>
-                            <div>
-                              <input type="file" class="form-control" value="<?php echo ($case->intimation_document) ?>" id="intimation_document" name="intimation_document" placeholder="Intimation Document" accept=".pdf,.doc,.docx,.txt"><span><a target="_blank" href="<?php echo ($case->intimation_document) ?>"><?php echo substr($case->intimation_document, 8); ?></a></span>
+                          <div class="col-md-4 file-list" id="file-list">
+                            <div class="form-control" style="display:flex;align-items:center;justify-content:center;vertical-align:center">
+                              <div class="file-upload">
+                                <button style="color:black;padding:0px 10px 0px 10px;background:none" class="btn"><i class="fas fa-cloud-upload-alt"></i></button>
+                                <input type="file" id="intimation_document" name="intimation_document[]" accept=".pdf,.doc,.docx,.txt" multiple>
+                              </div>
+                              <label for="intimation_document">Intimation Document</label>
                             </div>
+                            <?php if (!empty($case->intimation_document)) : ?>
+                              <?php $documents = explode(',', $case->intimation_document); ?>
+                              <?php foreach ($documents as $document) : ?>
+                                <div class="file-item">
+                                  <i class="fas fa-file-alt"></i>
+                                  <a target="_blank" href="<?php echo $document; ?>"><?php echo substr($document, strrpos($document, '/') + 1); ?></a>
+                                </div>
+                              <?php endforeach; ?>
                           </div>
+                        <?php endif; ?>
                         </div>
-
 
                         <div class="form-group row">
                           <div class="col-md-12">
