@@ -2882,6 +2882,7 @@ if (strlen($_SESSION['id'] == 0)) {
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>MedsCred | Edit Patient</title>
+    <link rel="shortcut icon" type="image/x-icon" href="dist/fav.png">
 
     <!-- Google Font: Source Sans Pro -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,400i,700&display=fallback">
@@ -3370,95 +3371,95 @@ if (strlen($_SESSION['id'] == 0)) {
               if ($case->case_type == '2') {
               ?>
 
-              <!-- Cashless -->
-              <div class="col-md-12" id="cashless-details">
-                <div class="card">
-                  <div class="card-header">
-                    <h3 class="card-title">Cashless Details</h3>
-                  </div>
-                  <div class="card-body">
-                    <div class="tab-content">
-                      <form class="form-horizontal" method="post" enctype="multipart/form-data">
-                        <div class="form-group row">
-                          <div class="col-md-6">
-                            <label for="pre_auth_doc">Pre Auth Doc</label>
-                            <div>
-                              <input type="file" class="form-control" value="<?php echo ($case->pre_auth_doc) ?>" id="pre_auth_doc" name="pre_auth_doc" placeholder="Settlement Letter" accept=".pdf,.doc,.docx,.txt">
-                              <span><a target="_blank" href="<?php echo ($case->pre_auth_doc) ?>"><?php echo substr($case->pre_auth_doc, 8); ?></a></span>
-                            </div>
-                          </div>
-                          <div class="col-md-6">
-                            <label for="pre_auth_number">Pre Auth Number</label>
-                            <div>
-                              <input type="text" class="form-control" value="<?php echo ($case->pre_auth_number) ?>" id="bankName" name="pre_auth_number" placeholder="Pre Auth Number">
-                            </div>
-                          </div>
-                        </div>
-                        <div class="form-group row">
-                          <div class="col-md-4">
-                            <label for="initial_approval_doc">Initial Approval Doc</label>
-                            <div>
-                              <input type="file" class="form-control" value="<?php echo ($case->initial_approval_doc) ?>" id="initial_approval_doc" name="initial_approval_doc" placeholder="Initial Approval Doc" accept=".pdf,.doc,.docx,.txt">
-                              <span><a target="_blank" href="<?php echo ($case->initial_approval_doc) ?>"><?php echo substr($case->initial_approval_doc, 8); ?></a></span>
-                            </div>
-                          </div>
-                          <div class="col-md-4">
-                            <label for="approval_amount">Approval Amount</label>
-                            <div>
-                              <input type="text" class="form-control" value="<?php echo ($case->approval_amount_cashless) ?>" id="approval_amount" name="approval_amount" placeholder="Approval Amount">
-                            </div>
-                          </div>
-                          <div class="col-md-4">
-                            <label for="final_approval_letter	">Final Approval Letter</label>
-                            <div>
-                              <input type="file" class="form-control" value="<?php echo ($case->final_approval_letter) ?>" id="final_approval_letter" name="final_approval_letter" placeholder="Initial Approval Doc" accept=".pdf,.doc,.docx,.txt">
-                              <span><a target="_blank" href="<?php echo ($case->final_approval_letter) ?>"><?php echo substr($case->final_approval_letter, 8); ?></a></span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div class="form-group row">
-                          <div class="col-md-12">
-                            <label for="remark">User Remark</label>
-                            <div>
-                              <textarea class="form-control" name="user_remark" id="remark" placeholder="User Remark"><?php echo ($case->user_remark) ?></textarea>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div class="form-group row">
-                          <div class="col-md-12">
-                            <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#modal-default-cashless" style="margin-top: 10px;">
-                              Submit
-                            </button>
-                          </div>
-                          <div class="modal fade" id="modal-default-cashless">
-                            <div class="modal-dialog">
-                              <div class="modal-content">
-                                <div class="modal-header">
-                                  <h4 class="modal-title">Cashless Details Creation/Updation!</h4>
-                                  <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                                    <span aria-hidden="true">&times;</span>
-                                  </button>
-                                </div>
-                                <div class="modal-body">
-                                  <p>Are you sure you want to create/update Cashless Details?</p>
-                                </div>
-                                <div class="modal-footer justify-content-between">
-                                  <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
-                                  <button type="submit" name="submit-patient-cashless-details" class="btn btn-danger">Submit</button>
-                                </div>
+                <!-- Cashless -->
+                <div class="col-md-12" id="cashless-details">
+                  <div class="card">
+                    <div class="card-header">
+                      <h3 class="card-title">Cashless Details</h3>
+                    </div>
+                    <div class="card-body">
+                      <div class="tab-content">
+                        <form class="form-horizontal" method="post" enctype="multipart/form-data">
+                          <div class="form-group row">
+                            <div class="col-md-6">
+                              <label for="pre_auth_doc">Pre Auth Doc</label>
+                              <div>
+                                <input type="file" class="form-control" value="<?php echo ($case->pre_auth_doc) ?>" id="pre_auth_doc" name="pre_auth_doc" placeholder="Settlement Letter" accept=".pdf,.doc,.docx,.txt">
+                                <span><a target="_blank" href="<?php echo ($case->pre_auth_doc) ?>"><?php echo substr($case->pre_auth_doc, 8); ?></a></span>
                               </div>
-                              <!-- /.modal-content -->
                             </div>
-                            <!-- /.modal-dialog -->
+                            <div class="col-md-6">
+                              <label for="pre_auth_number">Pre Auth Number</label>
+                              <div>
+                                <input type="text" class="form-control" value="<?php echo ($case->pre_auth_number) ?>" id="bankName" name="pre_auth_number" placeholder="Pre Auth Number">
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                      </form>
+                          <div class="form-group row">
+                            <div class="col-md-4">
+                              <label for="initial_approval_doc">Initial Approval Doc</label>
+                              <div>
+                                <input type="file" class="form-control" value="<?php echo ($case->initial_approval_doc) ?>" id="initial_approval_doc" name="initial_approval_doc" placeholder="Initial Approval Doc" accept=".pdf,.doc,.docx,.txt">
+                                <span><a target="_blank" href="<?php echo ($case->initial_approval_doc) ?>"><?php echo substr($case->initial_approval_doc, 8); ?></a></span>
+                              </div>
+                            </div>
+                            <div class="col-md-4">
+                              <label for="approval_amount">Approval Amount</label>
+                              <div>
+                                <input type="text" class="form-control" value="<?php echo ($case->approval_amount_cashless) ?>" id="approval_amount" name="approval_amount" placeholder="Approval Amount">
+                              </div>
+                            </div>
+                            <div class="col-md-4">
+                              <label for="final_approval_letter	">Final Approval Letter</label>
+                              <div>
+                                <input type="file" class="form-control" value="<?php echo ($case->final_approval_letter) ?>" id="final_approval_letter" name="final_approval_letter" placeholder="Initial Approval Doc" accept=".pdf,.doc,.docx,.txt">
+                                <span><a target="_blank" href="<?php echo ($case->final_approval_letter) ?>"><?php echo substr($case->final_approval_letter, 8); ?></a></span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div class="form-group row">
+                            <div class="col-md-12">
+                              <label for="remark">User Remark</label>
+                              <div>
+                                <textarea class="form-control" name="user_remark" id="remark" placeholder="User Remark"><?php echo ($case->user_remark) ?></textarea>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div class="form-group row">
+                            <div class="col-md-12">
+                              <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#modal-default-cashless" style="margin-top: 10px;">
+                                Submit
+                              </button>
+                            </div>
+                            <div class="modal fade" id="modal-default-cashless">
+                              <div class="modal-dialog">
+                                <div class="modal-content">
+                                  <div class="modal-header">
+                                    <h4 class="modal-title">Cashless Details Creation/Updation!</h4>
+                                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                      <span aria-hidden="true">&times;</span>
+                                    </button>
+                                  </div>
+                                  <div class="modal-body">
+                                    <p>Are you sure you want to create/update Cashless Details?</p>
+                                  </div>
+                                  <div class="modal-footer justify-content-between">
+                                    <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                                    <button type="submit" name="submit-patient-cashless-details" class="btn btn-danger">Submit</button>
+                                  </div>
+                                </div>
+                                <!-- /.modal-content -->
+                              </div>
+                              <!-- /.modal-dialog -->
+                            </div>
+                          </div>
+                        </form>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
 
               <?php } ?>
 

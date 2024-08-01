@@ -101,6 +101,7 @@ if (strlen($_SESSION['id'] == 0)) {
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>MedsCred | Doctor Detail</title>
+    <link rel="shortcut icon" type="image/x-icon" href="dist/fav.png">
 
     <!-- Google Font: Source Sans Pro -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,400i,700&display=fallback">

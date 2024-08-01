@@ -127,6 +127,7 @@ if (strlen($_SESSION['id'] == 0)) {
         }
       });
     </script>
+    <link rel="shortcut icon" type="image/x-icon" href="dist/fav.png">
   </head>
 
   <body class="hold-transition sidebar-mini">

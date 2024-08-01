@@ -73,6 +73,8 @@ if (strlen($_SESSION['id'] == 0)) {
     <!-- Theme style -->
     <link rel="stylesheet" href="./dist/css/adminlte.min.css">
 
+    <link rel="shortcut icon" type="image/x-icon" href="dist/fav.png">
+
     <!-- Select2 -->
     <link rel="stylesheet" href="./plugins/select2/css/select2.min.css">
     <link rel="stylesheet" href="./plugins/select2-bootstrap4-theme/select2-bootstrap4.min.css">
