@@ -33,7 +33,7 @@ if (strlen($_SESSION['id'] == 0)) {
         c.country_name,
         c.id AS country_id
     FROM hospitals h
-    JOIN countries c ON h.country = c.id
+    LEFT JOIN countries c ON h.country = c.id
     JOIN admin a ON h.verified_by = a.id
     WHERE h.id = '$hid'"
   );

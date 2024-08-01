@@ -6,10 +6,17 @@ if (strlen($_SESSION['id'] == 0)) {
   header('location:logout.php');
 } else {
 
+  $uname = $_SESSION['login'];
+
+  $conn = mysqli_query($con, "SELECT id, email from admin WHERE email = '$uname'");
+
+  $numId = mysqli_fetch_assoc($conn);
+
   date_default_timezone_set('Asia/Kolkata'); // change according timezone
   $currentTime = date('Y-m-d h:i:s A', time());
 
   if (isset($_POST['submit'])) {
+    $hospital_types = isset($_POST['hospital_type']) ? $_POST['hospital_type'] : array();
     $name = $_POST['hospital_name'];
     $hospital_email = $_POST['hospital_email'];
     $hospital_phone_number = $_POST['hospital_phone_number'];
@@ -19,8 +26,20 @@ if (strlen($_SESSION['id'] == 0)) {
     $state = $_POST['state'];
     $country = $_POST['country'];
     $pincode = $_POST['pincode'];
+    $account_holder_name = $_POST['account_holder_name'];
+    $account_number = $_POST['account_number'];
+    $bank_name = $_POST['bank_name'];
+    $ifsc_code = $_POST['ifsc_code'];
+    $account_type = $_POST['account_type'];
+    $reimburse_commission = $_POST['reimburse_commission'];
+    $cashless_commission = $_POST['cashless_commission'];
+    $asthetic_commission = $_POST['asthetic_commission'];
+    $verified_by = $numId['id'];
     // $password = md5($_POST['npass']);
-    $sql = mysqli_query($con, "INSERT INTO `hospitals`(`name`, `email`, `phone_number`, `address_line_1`, `address_line_2`, `city`, `state`, `country`, `pincode`, `is_active`, `created_at`) VALUES('$name','$hospital_email','$hospital_phone_number','$hospital_address_line_1','$hospital_address_line_2','$city','$state','$country','$pincode','1','$currentTime')");
+
+    $hospital_types_string = implode(',', $hospital_types);
+
+    $sql = mysqli_query($con, "INSERT INTO `hospitals`(`hospital_type`,`name`, `email`, `phone_number`, `address_line_1`, `address_line_2`, `city`, `state`, `country`, `pincode`,`account_holder_name`,`account_number`,`bank_name`,`ifsc_code`,`account_type`,`reimburse_commission`,`cashless_commission`,`asthetic_commission`,`verified_by`, `is_active`, `created_at`) VALUES('$hospital_types_string','$name','$hospital_email','$hospital_phone_number','$hospital_address_line_1','$hospital_address_line_2','$city','$state','$country','$pincode','$account_holder_name','$account_number','$bank_name','$ifsc_code','$account_type','$reimburse_commission','$cashless_commission','$asthetic_commission','$verified_by','1','$currentTime')");
     if ($sql) {
       echo "<script>
             window.addEventListener('load', function() {
@@ -130,46 +149,71 @@ if (strlen($_SESSION['id'] == 0)) {
               <div class="card card-primary">
                 <div class="card-body">
                   <form method="post">
-                    <div class="form-group">
-                      <label for="inputHospitalName">Hospital Name</label>
-                      <input type="text" id="inputHospitalName" name="hospital_name" class="form-control" required>
+
+                    <div class="form-group row">
+                      <div class="col-md-3">
+                        <label for="hospital_type" class="form-label">Hospital Type</label>
+                        <select class="form-control select2" id="hospital_type" name="hospital_type[]" multiple aria-label="Select multiple options">
+                          <option value="Reimbursement">Reimbursement</option>
+                          <option value="Cashless">Cashless</option>
+                          <option value="Asthetic">Asthetic</option>
+                        </select>
+                      </div>
+
+                      <div class="col-md-3">
+                        <label for="inputHospitalName">Hospital Name</label>
+                        <input type="text" id="inputHospitalName" placeholder="Hospital Name" name="hospital_name" class="form-control">
+                      </div>
+                      <div class="col-md-3">
+                        <label for="inputHospitalEmail">Hospital Email</label>
+                        <input type="email" id="inputHospitalEmail" placeholder="Hospital Email" name="hospital_email" class="form-control">
+                      </div>
+                      <div class="col-md-3">
+                        <label for="inputHospitalPhoneNumber">Hospital Phone Number</label>
+                        <input type="text" id="inputHospitalPhoneNumber" placeholder="Hospital Phone Number" name="hospital_phone_number" class="form-control">
+                      </div>
                     </div>
                     <div class="form-group row">
-                      <div class="col-md-6">
-                        <label for="inputHospitalEmail">Hospital Email</label>
-                        <input type="email" id="inputHospitalEmail" name="hospital_email" class="form-control" required>
+                      <div class="col-md-3">
+                        <label for="account_holder_name">Account Holder Name</label>
+                        <input type="text" id="account_holder_name" name="account_holder_name" class="form-control">
                       </div>
-                      <div class="col-md-6">
-                        <label for="inputHospitalPhoneNumber">Hospital Phone Number</label>
-                        <input type="text" id="inputHospitalPhoneNumber" name="hospital_phone_number" class="form-control">
+                      <div class="col-md-3">
+                        <label for="account_number">Account Number</label>
+                        <input type="text" id="account_number" name="account_number" class="form-control">
+                      </div>
+                      <div class="col-md-2">
+                        <label for="bankName">Bank Name</label>
+                        <input type="text" id="bankName" name="bank_name" class="form-control">
+                      </div>
+                      <div class="col-md-2">
+                        <label for="ifsc_code">IFSC Code</label>
+                        <input type="text" id="ifsc_code" name="ifsc_code" class="form-control">
+                      </div>
+                      <div class="col-md-2">
+                        <label for="account_type">IFSC Code</label>
+                        <input type="text" id="account_type" name="account_type" class="form-control">
                       </div>
                     </div>
 
                     <div class="form-group row">
-                      <div class="col-md-6">
+                      <div class="col-md-2">
                         <label for="inputHospitalAddress1">Address Line 1</label>
-                        <input type="text" id="inputHospitalAddress1" name="hospital_address_line_1" class="form-control" required>
+                        <input type="text" id="inputHospitalAddress1" name="hospital_address_line_1" class="form-control">
                       </div>
-                      <div class="col-md-6">
+                      <div class="col-md-2">
                         <label for="inputHospitalAddress2">Address Line 2</label>
                         <input type="text" id="inputHospitalAddress2" name="hospital_address_line_2" class="form-control">
                       </div>
-                    </div>
-
-                    <div class="form-group row">
-                      <div class="col-md-6">
+                      <div class="col-md-2">
                         <label for="inputCity">City</label>
                         <input type="text" value="<?php echo ($admin->city) ?>" class="form-control" name="city" id="inputCity" placeholder="City">
                       </div>
-                      <div class="col-md-6">
+                      <div class="col-md-2">
                         <label for="inputState">State</label>
                         <input type="text" value="<?php echo ($admin->state) ?>" class="form-control" name="state" id="inputState" placeholder="State">
                       </div>
-
-                    </div>
-
-                    <div class="form-group row">
-                      <div class="col-md-6">
+                      <div class="col-md-2">
                         <label for="country">Country</label>
                         <select class="form-control select2" name="country" id="inputCountry">
                           <?php $ret = mysqli_query($con, "SELECT id,country_name FROM countries");
@@ -181,9 +225,25 @@ if (strlen($_SESSION['id'] == 0)) {
                           <?php } ?>
                         </select>
                       </div>
-                      <div class="col-md-6">
+                      <div class="col-md-2">
                         <label for="inputPinCode">Pin Code</label>
                         <input type="text" value="<?php echo ($admin->pincode) ?>" class="form-control" name="pincode" id="inputPinCode" placeholder="pincode">
+                      </div>
+                    </div>
+
+                    <div class="form-group row">
+                      <div class="col-md-4">
+                        <label for="reimburse_commission">Reimbursement Commission </label>
+                        <input type="text" id="reimburse_commission" name="reimburse_commission" class="form-control">
+                      </div>
+                      <div class="col-md-4">
+                        <label for="cashless_commission">Cashless Commission </label>
+                        <input type="text" id="cashless_commission" name="cashless_commission" class="form-control">
+                      </div>
+
+                      <div class="col-md-4">
+                        <label for="asthetic_commission ">Asthetic Commission </label>
+                        <input type="text" id="asthetic_commission" name="asthetic_commission" class="form-control">
                       </div>
                     </div>
 

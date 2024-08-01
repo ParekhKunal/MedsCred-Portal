@@ -113,7 +113,24 @@ if (strlen($_SESSION['id'] == 0)) {
                             pkd.patient_insurance_card,
                             pkd.primary_insured_adhaar,
                             pkd.primary_insured_insurance,
-                            pkd.primary_insured_pan
+                            pkd.primary_insured_pan,
+                            psud.claim_number,
+                            psud.utr_number,
+                            psud.approval_amount,
+                            psud.approval_date,
+                            psud.settlement_date,
+                            psud.settlement_letter,
+                            psud.query_resolution_doc_status,
+                            psud.cheque_amount,
+                            psud.tds_amount,
+                            psud.gst_amount,
+                            psud.comission_amount,
+                             pcd.pre_auth_doc,
+                            pcd.pre_auth_number,
+                            pcd.initial_approval_doc,
+                            pcd.approval_amount AS approval_amount_cashless,
+                            pcd.final_approval_letter,
+                            pcd.user_remarks
                             FROM patient_cases_info pci
                             LEFT JOIN hospitals h ON pci.hospital_id = h.id  
                             LEFT JOIN doctors d ON pci.doctor_id = d.id
@@ -130,6 +147,8 @@ if (strlen($_SESSION['id'] == 0)) {
                             LEFT JOIN patient_nme_details pnmed ON pci.id = pnmed.case_id
                             LEFT JOIN patient_dispatch_details pddd ON pci.id = pddd.case_id
                             LEFT JOIN patient_kyc_details pkd ON pci.id = pkd.case_id
+                            LEFT JOIN patient_status_update_details psud ON pci.id = psud.case_id
+                            LEFT JOIN patient_cashless_details pcd ON pci.id = pcd.case_id
                             LEFT JOIN patients p ON pci.patient_id = p.id
                             LEFT JOIN patient_decoded_details pdecodedd ON pci.id = pdecodedd.case_id
                           WHERE pci.id = '$cid'");
@@ -247,23 +266,6 @@ if (strlen($_SESSION['id'] == 0)) {
       }
     }
 
-    // $intimation_target_file = $target_dir . $cid . '_intimation_document_' . $currentTimee . '.' . strtolower(pathinfo($intimation_file["name"], PATHINFO_EXTENSION));
-
-
-    // if (!empty($intimation_file['name']) && !in_array($intimation_fileType, $allowedTypes)) {
-    //   $upload_errors[] = "Sorry, only PDF, DOC, DOCX, and TXT files are allowed for Intimation Document.";
-    // }
-
-    // if (empty($upload_errors)) {
-    //   if (!empty($intimation_file['name'])) {
-    //     if (move_uploaded_file($intimation_file["tmp_name"], $intimation_target_file)) {
-    //       $intimation_filePath = $con->real_escape_string($intimation_target_file);
-    //     } else {
-    //       $upload_errors[] = "Sorry, there was an error uploading your Intimation Document.";
-    //     }
-    //   }
-    // }
-
     if (empty($upload_errors)) {
 
       $intimation_documents = implode(',', $intimation_filePaths);
@@ -288,8 +290,14 @@ if (strlen($_SESSION['id'] == 0)) {
       );
 
       $reimburse2 = mysqli_fetch_array($reimburse);
+      $existing_documents = $reimburse2 ? $reimburse2['intimation_document'] : '';
 
-      if ($reimburse2 > 0) {
+      // Append new documents to existing ones if any
+      if (!empty($existing_documents)) {
+        $intimation_documents = $existing_documents . ',' . $intimation_documents;
+      }
+
+      if ($reimburse2) {
         $patient_id = $case->patient_id;
         $case_id = $cid;
         $admission_date = $_POST['admission_date'];
@@ -328,7 +336,7 @@ if (strlen($_SESSION['id'] == 0)) {
         $admission_date = $_POST['admission_date'];
         $intimation_number = $_POST['intimation_number'];
         // $intimation_document = !empty($intimation_file['name']) ? $intimation_target_file : '';
-        $intimation_document = !empty($intimation_filePaths) ? $intimation_documents : $reimburse2['intimation_document'];
+        $intimation_document = !empty($intimation_filePaths) ? $intimation_documents : $_POST['intimation_document'];
         $created_by = $numId['id'];
         $inserted_by = 'ADMIN';
         $created_at = $currentTime;
@@ -368,8 +376,6 @@ if (strlen($_SESSION['id'] == 0)) {
       }
     }
   }
-
-
 
   if (isset($_POST['submit-patient-loan-details'])) {
     // $target_dir = "uploads/";
@@ -545,7 +551,6 @@ if (strlen($_SESSION['id'] == 0)) {
     }
   }
 
-
   //Status details
   if (isset($_POST['submit-patient-status'])) {
 
@@ -639,7 +644,6 @@ if (strlen($_SESSION['id'] == 0)) {
       }
     }
   }
-
 
   //insurrance details
   if (isset($_POST['submit-patient-insurrance-details'])) {
@@ -2458,6 +2462,418 @@ if (strlen($_SESSION['id'] == 0)) {
     }
   }
 
+  if (isset($_POST['submit-patient-status-update-details'])) {
+    // $target_dir = "uploads/";
+    $target_dir = "../uploads/";
+
+    if (!is_dir($target_dir)) {
+      mkdir($target_dir, 0777, true);
+    }
+
+    $currentTimee = date("YmdHis");
+
+    $allowedTypes = array("pdf", "doc", "docx", "txt");
+
+    function handleFileUpload($file, $fieldName, $cid, $currentTimee, $target_dir, $allowedTypes, &$upload_errors)
+    {
+      $target_file = $target_dir . $cid . '_' . $fieldName . '_' . $currentTimee . '.' . strtolower(pathinfo($file["name"], PATHINFO_EXTENSION));
+      $fileType = strtolower(pathinfo($target_file, PATHINFO_EXTENSION));
+
+      if (!empty($file['name']) && in_array($fileType, $allowedTypes)) {
+        if (move_uploaded_file($file["tmp_name"], $target_file)) {
+          return $target_file;
+        } else {
+          $upload_errors[] = "Sorry, there was an error uploading your $fieldName.";
+          return null;
+        }
+      } else if (!empty($file['name'])) {
+        $upload_errors[] = "Sorry, only PDF, DOC, DOCX, and TXT files are allowed for $fieldName.";
+        return null;
+      }
+      return null;
+    }
+
+    $upload_errors = array();
+
+    $settlement_letter = handleFileUpload($_FILES['settlement_letter'], 'settlement_letter', $cid, $currentTimee, $target_dir, $allowedTypes, $upload_errors);
+
+    $query_resolution_doc_status = handleFileUpload($_FILES['query_resolution_doc_status'], 'query_resolution_doc_status', $cid, $currentTimee, $target_dir, $allowedTypes, $upload_errors);
+
+    if (empty($upload_errors)) {
+      $statusUpdate = mysqli_query(
+        $con,
+        "SELECT 
+                psud.id,
+                psud.patient_id,
+                psud.case_id,
+                psud.claim_number,
+                psud.utr_number,
+                psud.approval_amount,
+                psud.approval_date,
+                psud.settlement_date,
+                psud.settlement_letter,
+                psud.query_resolution_doc_status,
+                psud.cheque_amount,
+                psud.tds_amount,
+                psud.gst_amount,
+                psud.comission_amount,
+                psud.created_by,
+                psud.inserted_by,
+                psud.created_at,
+                psud.updated_at
+            FROM
+                patient_status_update_details psud
+            WHERE 
+                psud.case_id = '$cid'"
+      );
+
+      $statusUpdate2 = mysqli_fetch_array($statusUpdate);
+
+      if ($statusUpdate2 > 0) {
+        $patient_id = $case->patient_id;
+        $case_id = $cid;
+        $claim_number = $_POST['claim_number'];
+        $utr_number = $_POST['utr_number'];
+        $approval_amount = $_POST['approval_amount'];
+        $approval_date = $_POST['approval_date'];
+        $settlement_date = $_POST['settlement_date'];
+
+        $settlement_letter = !empty($_FILES['settlement_letter']['name']) ? $settlement_letter : $statusUpdate2['settlement_letter'];
+
+        $query_resolution_doc_status = !empty($_FILES['query_resolution_doc_status']['name']) ? $query_resolution_doc_status : $statusUpdate2['query_resolution_doc_status'];
+
+        $cheque_amount = $_POST['cheque_amount'];
+        $tds_amount = $_POST['tds_amount'];
+        $gst_amount = $_POST['gst_amount'];
+        $comission_amount = $_POST['comission_amount'];
+
+        $created_by = $numId['id'];
+        $inserted_by = 'ADMIN';
+        $created_at = $currentTime;
+        $updated_at = $currentTime;
+
+        $statusUpdate3 = mysqli_query($con, "UPDATE patient_status_update_details 
+                SET claim_number='$claim_number', 
+                    utr_number='$utr_number', 
+                    approval_amount='$approval_amount', 
+                    approval_date='$approval_date', 
+                    settlement_date='$settlement_date', 
+                    settlement_letter='$settlement_letter', 
+                    query_resolution_doc_status='$query_resolution_doc_status', 
+                    cheque_amount='$cheque_amount', 
+                    tds_amount='$tds_amount', 
+                    gst_amount='$gst_amount', 
+                    comission_amount='$comission_amount', 
+                    updated_at='$updated_at' 
+                WHERE case_id='$cid'");
+
+        if ($statusUpdate3) {
+          echo "<script>
+                    window.addEventListener('load', function() {
+                        Toast.fire({
+                            icon: 'success',
+                            title: 'Patient Status Update Updated Successfully.'
+                        });
+
+                        setTimeout(function(){
+                            window.location.href = `edit-case.php?id=$cid`;
+                        }, 3000);
+                    });
+                </script>";
+        }
+      } else {
+        $patient_id = $case->patient_id;
+        $case_id = $cid;
+        $claim_number = $_POST['claim_number'];
+        $utr_number = $_POST['utr_number'];
+        $approval_amount = $_POST['approval_amount'];
+        $approval_date = $_POST['approval_date'];
+        $settlement_date = $_POST['settlement_date'];
+
+        $settlement_letter = !empty($_FILES['settlement_letter']['name']) ? $settlement_letter : $_POST['settlement_letter'];
+
+        $query_resolution_doc_status = !empty($_FILES['query_resolution_doc_status']['name']) ? $query_resolution_doc_status : $_POST['query_resolution_doc_dispatch'];
+
+        $cheque_amount = $_POST['cheque_amount'];
+        $tds_amount = $_POST['tds_amount'];
+        $gst_amount = $_POST['gst_amount'];
+        $comission_amount = $_POST['comission_amount'];
+        $created_by = $numId['id'];
+        $inserted_by = 'ADMIN';
+        $created_at = $currentTime;
+        $updated_at = $currentTime;
+
+        $statusUpdate4 = mysqli_query($con, "INSERT INTO `patient_status_update_details` 
+                (`patient_id`, `case_id`, `claim_number`, `utr_number`, `approval_amount`, `approval_date`, `settlement_date`, `settlement_letter`, `query_resolution_doc_status`, `cheque_amount`, `tds_amount`, `gst_amount`, `comission_amount`,
+                 `created_by`, `inserted_by`, `created_at`) 
+                VALUES 
+                ('$patient_id', '$case_id', '$claim_number', '$utr_number', '$approval_amount', '$approval_date', '$settlement_date', '$settlement_letter', '$query_resolution_doc_status','$cheque_amount','$tds_amount','$gst_amount','$comission_amount', '$created_by', '$inserted_by', '$created_at')");
+
+        if ($statusUpdate4) {
+          echo "<script>
+                    window.addEventListener('load', function() {
+                        Toast.fire({
+                            icon: 'success',
+                            title: 'Patient Status Update Details Added Successfully.'
+                        });
+
+                        setTimeout(function(){
+                            window.location.href = `edit-case.php?id=$cid`;
+                        }, 3000);
+                    });
+                </script>";
+        }
+      }
+    } else {
+      foreach ($upload_errors as $error) {
+        echo "<script>
+                window.addEventListener('load', function() {
+                    Toast.fire({
+                        icon: 'error',
+                        title: '$error'
+                    });
+                });
+            </script>";
+      }
+    }
+  }
+
+  if (isset($_POST['submit-patient-status-update-remark'])) {
+
+    $statusUpdateRemark = mysqli_query(
+      $con,
+      "SELECT 
+        psur.id,
+        psur.patient_id,
+        psur.case_id,
+        psur.remark_type,
+        psur.remark,
+        psur.created_by,
+        psur.is_active,
+        psur.inserted_by,
+        psur.created_at,
+        psur.updated_at
+    FROM
+    patient_status_update_remarks psur
+    WHERE 
+        psur.case_id = '$cid'"
+    );
+
+    $statusUpdateRemark2 = mysqli_fetch_array($statusUpdateRemark);
+
+    if ($statusUpdateRemark2 > 0) {
+
+      $patient_id = $case->patient_id;
+      $case_id = $cid;
+      $remark_type = $_POST['remark_type'];
+      $remark = $_POST['remark'];
+      $created_by = $numId['id'];
+      $inserted_by = 'ADMIN';
+      $created_at = $currentTime;
+      $updated_at = $currentTime;
+
+      $statusUpdateRemark3 =
+        mysqli_query($con, "INSERT INTO `patient_status_update_remarks` 
+        (`patient_id`, `case_id`, `remark_type`, `remark`,`is_active`,`created_by`, `inserted_by`, `created_at`) 
+        VALUES 
+        ('$patient_id', '$case_id', '$remark_type', '$remark','1', '$created_by', '$inserted_by', '$created_at')");
+
+      if ($statusUpdateRemark3) {
+        echo "<script>
+            window.addEventListener('load', function() {
+                Toast.fire({
+                    icon: 'success',
+                    title: 'DischargeRemark Remarks Added Successfully.'
+                });
+
+                setTimeout(function(){
+                    window.location.href = `edit-case.php?id=$cid`;
+                }, 3000);
+            });
+        </script>";
+      }
+    } else {
+
+
+      $patient_id = $case->patient_id;
+      $case_id = $cid;
+      $remark_type = $_POST['remark_type'];
+      $remark = $_POST['remark'];
+      $created_by = $numId['id'];
+      $inserted_by = 'ADMIN';
+      $created_at = $currentTime;
+      $updated_at = $currentTime;
+
+      $statusUpdateRemark4 = mysqli_query($con, "INSERT INTO `patient_status_update_remarks` 
+        (`patient_id`, `case_id`, `remark_type`, `remark`,`is_active`,`created_by`,`inserted_by`, `created_at`) 
+        VALUES 
+        ('$patient_id', '$case_id', '$remark_type', '$remark','1','$created_by','$inserted_by', '$created_at')");
+
+      if ($statusUpdateRemark4) {
+        echo "<script>
+            window.addEventListener('load', function() {
+                Toast.fire({
+                    icon: 'success',
+                    title: 'Discharge Remark Added Successfully.'
+                });
+
+                setTimeout(function(){
+                    window.location.href = `edit-case.php?id=$cid`;
+                }, 3000);
+            });
+        </script>";
+      }
+    }
+  }
+
+  if (isset($_POST['submit-patient-cashless-details'])) {
+    // $target_dir = "uploads/";
+    $target_dir = "../uploads/";
+
+    if (!is_dir($target_dir)) {
+      mkdir($target_dir, 0777, true);
+    }
+
+    $currentTimee = date("YmdHis");
+
+    $allowedTypes = array("pdf", "doc", "docx", "txt");
+
+    function handleFileUpload($file, $fieldName, $cid, $currentTimee, $target_dir, $allowedTypes, &$upload_errors)
+    {
+      $fileName = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+      $target_file = $target_dir . $cid . '_' . $fieldName . '_' . $currentTimee . '.' . $fileName;
+
+      if (!empty($file['name']) && in_array($fileName, $allowedTypes)) {
+        if (move_uploaded_file($file["tmp_name"], $target_file)) {
+          return $target_file;
+        } else {
+          $upload_errors[] = "Sorry, there was an error uploading your $fieldName.";
+          return null;
+        }
+      } else if (!empty($file['name'])) {
+        $upload_errors[] = "Sorry, only PDF, DOC, DOCX, and TXT files are allowed for $fieldName.";
+        return null;
+      }
+      return null;
+    }
+
+    $upload_errors = array();
+
+    $pre_auth_doc = handleFileUpload($_FILES['pre_auth_doc'], 'pre_auth_doc', $cid, $currentTimee, $target_dir, $allowedTypes, $upload_errors);
+    $initial_approval_doc = handleFileUpload($_FILES['initial_approval_doc'], 'initial_approval_doc', $cid, $currentTimee, $target_dir, $allowedTypes, $upload_errors);
+    $final_approval_letter = handleFileUpload($_FILES['final_approval_letter'], 'final_approval_letter', $cid, $currentTimee, $target_dir, $allowedTypes, $upload_errors);
+
+    if (empty($upload_errors)) {
+      $cashlessDetail = mysqli_query(
+        $con,
+        "SELECT 
+                pcd.id,
+                pcd.patient_id,
+                pcd.case_id,
+                pcd.pre_auth_doc,
+                pcd.pre_auth_number,
+                pcd.initial_approval_doc,
+                pcd.approval_amount,
+                pcd.final_approval_letter,
+                pcd.user_remarks,
+                pcd.created_by,
+                pcd.inserted_by,
+                pcd.created_at,
+                pcd.updated_at
+            FROM
+                patient_cashless_details pcd
+            WHERE 
+                pcd.case_id = '$cid'"
+      );
+
+      $cashlessDetail2 = mysqli_fetch_array($cashlessDetail);
+
+      if ($cashlessDetail2) {
+        $pre_auth_doc = !empty($_FILES['pre_auth_doc']['name']) ? $pre_auth_doc : $cashlessDetail2['pre_auth_doc'];
+        $pre_auth_number = isset($_POST['pre_auth_number']) ? $_POST['pre_auth_number'] : '';
+        $initial_approval_doc = !empty($_FILES['initial_approval_doc']['name']) ? $initial_approval_doc : $cashlessDetail2['initial_approval_doc'];
+        $approval_amount = isset($_POST['approval_amount']) ? $_POST['approval_amount'] : '';
+        $final_approval_letter = !empty($_FILES['final_approval_letter']['name']) ? $final_approval_letter : $cashlessDetail2['final_approval_letter'];
+        $user_remarks = isset($_POST['user_remarks']) ? $_POST['user_remarks'] : '';
+
+        $created_by = $numId['id'];
+        $inserted_by = 'ADMIN';
+        $created_at = $currentTime;
+        $updated_at = $currentTime;
+
+        $cashlessDetail3 = mysqli_query($con, "UPDATE patient_cashless_details 
+                SET pre_auth_doc='$pre_auth_doc', 
+                    pre_auth_number='$pre_auth_number', 
+                    initial_approval_doc='$initial_approval_doc', 
+                    approval_amount='$approval_amount', 
+                    final_approval_letter='$final_approval_letter', 
+                    user_remarks='$user_remarks', 
+                    updated_at='$updated_at' 
+                WHERE case_id='$cid'");
+
+        if ($cashlessDetail3) {
+          echo "<script>
+                        window.addEventListener('load', function() {
+                            Toast.fire({
+                                icon: 'success',
+                                title: 'Patient Status Update Updated Successfully.'
+                            });
+
+                            setTimeout(function(){
+                                window.location.href = `edit-case.php?id=$cid`;
+                            }, 3000);
+                        });
+                    </script>";
+        }
+      } else {
+        $pre_auth_doc = !empty($_FILES['pre_auth_doc']['name']) ? $pre_auth_doc : '';
+        $pre_auth_number = isset($_POST['pre_auth_number']) ? $_POST['pre_auth_number'] : '';
+        $initial_approval_doc = !empty($_FILES['initial_approval_doc']['name']) ? $initial_approval_doc : '';
+        $approval_amount = isset($_POST['approval_amount']) ? $_POST['approval_amount'] : '';
+        $final_approval_letter = !empty($_FILES['final_approval_letter']['name']) ? $final_approval_letter : '';
+        $user_remarks = isset($_POST['user_remarks']) ? $_POST['user_remarks'] : '';
+
+        $created_by = $numId['id'];
+        $inserted_by = 'ADMIN';
+        $created_at = $currentTime;
+
+        $cashlessDetail4 = mysqli_query($con, "INSERT INTO `patient_cashless_details` 
+                (`patient_id`, `case_id`, `pre_auth_doc`, `pre_auth_number`, `initial_approval_doc`, `approval_amount`, `final_approval_letter`, `user_remarks`,
+                 `created_by`, `inserted_by`, `created_at`) 
+                VALUES 
+                ('$patient_id', '$case_id', '$pre_auth_doc', '$pre_auth_number', '$initial_approval_doc', '$approval_amount', '$final_approval_letter', '$user_remarks',  '$created_by', '$inserted_by', '$created_at')");
+
+        if ($cashlessDetail4) {
+          echo "<script>
+                        window.addEventListener('load', function() {
+                            Toast.fire({
+                                icon: 'success',
+                                title: 'Patient Status Update Details Added Successfully.'
+                            });
+
+                            setTimeout(function(){
+                                window.location.href = `edit-case.php?id=$cid`;
+                            }, 3000);
+                        });
+                    </script>";
+        }
+      }
+    } else {
+      foreach ($upload_errors as $error) {
+        echo "<script>
+                    window.addEventListener('load', function() {
+                        Toast.fire({
+                            icon: 'error',
+                            title: '$error'
+                        });
+                    });
+                </script>";
+      }
+    }
+  }
+
+
+
 ?>
   <!DOCTYPE html>
   <html lang="en">
@@ -2524,7 +2940,6 @@ if (strlen($_SESSION['id'] == 0)) {
       });
     </script>
 
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
     <style>
       .file-upload {
         position: relative;
@@ -2572,6 +2987,27 @@ if (strlen($_SESSION['id'] == 0)) {
         color: #007bff;
         text-decoration: none;
       }
+
+      .scroll-to-top {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background-color: #007bff;
+        color: white;
+        border: none;
+        border-radius: 50%;
+        padding: 10px 15px 10px 15px;
+        cursor: pointer;
+        font-size: 18px;
+        display: none;
+        /* Initially hidden */
+        transition: opacity 0.3s;
+        z-index: 99
+      }
+
+      .scroll-to-top:hover {
+        background-color: #0056b3;
+      }
     </style>
 
   </head>
@@ -2580,6 +3016,8 @@ if (strlen($_SESSION['id'] == 0)) {
     <div class="wrapper">
       <?php include('include/navbar.php'); ?>
       <?php include('include/sidebar.php'); ?>
+
+      <button id="scrollToTopBtn" class="scroll-to-top" onclick="scrollToTop()">↑</button>
 
       <div class="content-wrapper">
         <section class="content-header">
@@ -2607,11 +3045,21 @@ if (strlen($_SESSION['id'] == 0)) {
                 <a type="button" class="btn btn-danger" href="#personal-details" style="margin-top: 10px;margin-bottom: 10px;">
                   Personal Details
                 </a>
+                <a type="button" class="btn btn-danger" href="#kyc" style="margin-top: 10px;margin-bottom: 10px;">
+                  KYC
+                </a>
+                <a type="button" class="btn btn-danger" href="#policy-remarks" style="margin-top: 10px;margin-bottom: 10px;">
+                  Policy Remarks
+                </a>
+                <?php
+                if ($case->case_type == '2') {
+                  echo '<a type="button" class="btn btn-danger" href="#cashless" style="margin-top: 10px; margin-bottom: 10px;">
+                    Cashless
+                  </a>';
+                }
+                ?>
                 <a type="button" class="btn btn-danger" href="#reimbursement-adminttedOn" style="margin-top: 10px;margin-bottom: 10px;">
                   Reimbursement | Admintted on
-                </a>
-                <a type="button" class="btn btn-danger" href="#bank-details" style="margin-top: 10px;margin-bottom: 10px;">
-                  Bank Details
                 </a>
                 <a type="button" class="btn btn-danger" href="#insurrance-policy-details" style="margin-top: 10px;margin-bottom: 10px;">
                   Insurance Policy Details
@@ -2622,23 +3070,29 @@ if (strlen($_SESSION['id'] == 0)) {
                 <a type="button" class="btn btn-danger" href="#policy-holder" style="margin-top: 10px;margin-bottom: 10px;">
                   Policy Holder
                 </a>
+                <a type="button" class="btn btn-danger" href="#loan-details" style="margin-top: 10px;margin-bottom: 10px;">
+                  Pre Loan Details
+                </a>
+                <a type="button" class="btn btn-danger" href="#bank-details" style="margin-top: 10px;margin-bottom: 10px;">
+                  Bank Details
+                </a>
                 <a type="button" class="btn btn-danger" href="#discharge" style="margin-top: 10px;margin-bottom: 10px;">
                   Discharge
                 </a>
                 <a type="button" class="btn btn-danger" href="#nme-approval" style="margin-top: 10px;margin-bottom: 10px;">
                   NME Approval
                 </a>
+                <a type="button" class="btn btn-danger" href="#file-dispatch" style="margin-top: 10px;margin-bottom: 10px;">
+                  File Dispatch
+                </a>
                 <a type="button" class="btn btn-danger" href="#pod" style="margin-top: 10px;margin-bottom: 10px;">
                   POD
                 </a>
-                <a type="button" class="btn btn-danger" href="#loan-details" style="margin-top: 10px;margin-bottom: 10px;">
-                  Loan Details
-                </a>
                 <a type="button" class="btn btn-danger" href="#payment-details" style="margin-top: 10px;margin-bottom: 10px;">
-                  Payment Details
+                  Post Loan Details
                 </a>
-                <a type="button" class="btn btn-danger" href="#policy-remarks" style="margin-top: 10px;margin-bottom: 10px;">
-                  Policy Remarks
+                <a type="button" class="btn btn-danger" href="#status-update-details" style="margin-top: 10px;margin-bottom: 10px;">
+                  Status Update
                 </a>
               </div>
 
@@ -2668,121 +3122,6 @@ if (strlen($_SESSION['id'] == 0)) {
                         </div>
                         <div>
                           <button type="submit" name="submit-patient-status" class="btn btn-danger">Submit</button>
-                        </div>
-                      </form>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Primary Insured KYC -->
-              <div class="col-md-12" id="pod">
-                <div class="card">
-                  <div class="card-header">
-                    <h3 class="card-title">KYC</h3>
-                  </div>
-                  <div class="card-body">
-                    <div class="tab-content">
-                      <form class="form-horizontal" method="post" enctype="multipart/form-data">
-
-                        <h4>Patient KYC</h4>
-                        <hr>
-                        <div class="form-group row">
-
-                          <div class="col-md-6">
-                            <label for="patient_adhaar_card">Patient Adhaar Card</label>
-                            <div>
-                              <input type="file" class="form-control" value="<?php echo ($case->patient_adhaar_card) ?>" id="patient_adhaar_card" name="patient_adhaar_card" placeholder="Patient Adhaar Card" accept=".pdf,.doc,.docx,.txt">
-                              <span><a target="_blank" href="<?php echo ($case->patient_adhaar_card) ?>"><?php echo substr($case->patient_adhaar_card, 8); ?></a></span>
-                            </div>
-                          </div>
-                          <div class="col-md-6">
-                            <label for="patient_insurance_card">Patient Insurance Card</label>
-                            <div>
-                              <input type="file" class="form-control" value="<?php echo ($case->patient_insurance_card) ?>" id="patient_insurance_card" name="patient_insurance_card" placeholder="Primary Insured Insurance Card" accept=".pdf,.doc,.docx,.txt">
-                              <span><a target="_blank" href="<?php echo ($case->patient_insurance_card) ?>"><?php echo substr($case->patient_insurance_card, 8); ?></a></span>
-                            </div>
-                          </div>
-                        </div>
-                        <hr>
-                        <h4>Past Treatment Record</h4>
-                        <hr>
-                        <div class="form-group row">
-                          <div class="col-md-4">
-                            <label for="doctor_prescription">Doctor Prescription</label>
-                            <div>
-                              <input type="file" class="form-control" value="<?php echo ($case->doctor_prescription) ?>" id="doctor_prescription" name="doctor_prescription" placeholder="Doctor Prescription" accept=".pdf,.doc,.docx,.txt">
-                              <span><a target="_blank" href="<?php echo ($case->doctor_prescription) ?>"><?php echo substr($case->doctor_prescription, 8); ?></a></span>
-                            </div>
-                          </div>
-                          <div class="col-md-4">
-                            <label for="reports">Reports</label>
-                            <div>
-                              <input type="file" class="form-control" value="<?php echo ($case->reports) ?>" id="reports" name="reports" placeholder="Reports" accept=".pdf,.doc,.docx,.txt">
-                              <span><a target="_blank" href="<?php echo ($case->reports) ?>"><?php echo substr($case->reports, 8); ?></a></span>
-                            </div>
-                          </div>
-                          <div class="col-md-4">
-                            <label for="past_treatment_record">Past Treatment Records</label>
-                            <div>
-                              <input type="file" class="form-control" value="<?php echo ($case->past_treatment_record) ?>" id="past_treatment_record" name="past_treatment_record" placeholder="Past Treatment Records" accept=".pdf,.doc,.docx,.txt">
-                              <span><a target="_blank" href="<?php echo ($case->past_treatment_record) ?>"><?php echo substr($case->past_treatment_record, 8); ?></a></span>
-                            </div>
-                          </div>
-                        </div>
-                        <hr>
-                        <h4>Primary Insured KYC</h4>
-                        <hr>
-                        <div class="form-group row">
-                          <div class="col-md-4">
-                            <label for="primary_insured_adhaar">Primary Insured Adhaar Card</label>
-                            <div>
-                              <input type="file" class="form-control" value="<?php echo ($case->primary_insured_adhaar) ?>" id="primary_insured_adhaar" name="primary_insured_adhaar" placeholder="Primary Insured Adhaar Card" accept=".pdf,.doc,.docx,.txt">
-                              <span><a target="_blank" href="<?php echo ($case->primary_insured_adhaar) ?>"><?php echo substr($case->primary_insured_adhaar, 8); ?></a></span>
-                            </div>
-                          </div>
-                          <div class="col-md-4">
-                            <label for="primary_insured_insurance">Primary Insured Insurance Card</label>
-                            <div>
-                              <input type="file" class="form-control" value="<?php echo ($case->primary_insured_insurance) ?>" id="primary_insured_insurance" name="primary_insured_insurance" placeholder="Primary Insured Insurance Card" accept=".pdf,.doc,.docx,.txt">
-                              <span><a target="_blank" href="<?php echo ($case->primary_insured_insurance) ?>"><?php echo substr($case->primary_insured_insurance, 8); ?></a></span>
-                            </div>
-                          </div>
-                          <div class="col-md-4">
-                            <label for="primary_insured_pan">Primary Insured PAN Card</label>
-                            <div>
-                              <input type="file" class="form-control" value="<?php echo ($case->primary_insured_pan) ?>" id="primary_insured_pan" name="primary_insured_pan" placeholder="Primary Insured PAN Card" accept=".pdf,.doc,.docx,.txt">
-                              <span><a target="_blank" href="<?php echo ($case->primary_insured_pan) ?>"><?php echo substr($case->primary_insured_pan, 8); ?></a></span>
-                            </div>
-                          </div>
-                        </div>
-                        <div class="form-group row">
-                          <div class="col-md-12">
-                            <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#modal-default-primary-insured-kyc" style="margin-top: 10px;">
-                              Submit
-                            </button>
-                          </div>
-                          <div class="modal fade" id="modal-default-primary-insured-kyc">
-                            <div class="modal-dialog">
-                              <div class="modal-content">
-                                <div class="modal-header">
-                                  <h4 class="modal-title">Primary Insured KYC Creation/Updation!</h4>
-                                  <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                                    <span aria-hidden="true">&times;</span>
-                                  </button>
-                                </div>
-                                <div class="modal-body">
-                                  <p>Are you sure you want to create/update Primary Insured KYC?</p>
-                                </div>
-                                <div class="modal-footer justify-content-between">
-                                  <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
-                                  <button type="submit" name="submit-patient-kyc-details" class="btn btn-danger">Submit</button>
-                                </div>
-                              </div>
-                              <!-- /.modal-content -->
-                            </div>
-                            <!-- /.modal-dialog -->
-                          </div>
                         </div>
                       </form>
                     </div>
@@ -2912,75 +3251,202 @@ if (strlen($_SESSION['id'] == 0)) {
                 </div>
               </div>
 
-              <!-- reimbursement -->
-              <div class="col-md-12" id="reimbursement-adminttedOn">
+              <!-- Primary Insured KYC -->
+              <div class="col-md-12" id="kyc">
                 <div class="card">
                   <div class="card-header">
-                    <h3 class="card-title">Reimbursement | Admintted on</h3>
+                    <h3 class="card-title">KYC</h3>
+                  </div>
+                  <div class="card-body">
+                    <div class="tab-content">
+                      <form class="form-horizontal" method="post" enctype="multipart/form-data">
+
+                        <h4>Patient KYC</h4>
+                        <hr>
+                        <div class="form-group row">
+
+                          <div class="col-md-6">
+                            <label for="patient_adhaar_card">Patient Adhaar Card</label>
+                            <div>
+                              <input type="file" class="form-control" value="<?php echo ($case->patient_adhaar_card) ?>" id="patient_adhaar_card" name="patient_adhaar_card" placeholder="Patient Adhaar Card" accept=".pdf,.doc,.docx,.txt">
+                              <span><a target="_blank" href="<?php echo ($case->patient_adhaar_card) ?>"><?php echo substr($case->patient_adhaar_card, 8); ?></a></span>
+                            </div>
+                          </div>
+                          <div class="col-md-6">
+                            <label for="patient_insurance_card">Patient Insurance Card</label>
+                            <div>
+                              <input type="file" class="form-control" value="<?php echo ($case->patient_insurance_card) ?>" id="patient_insurance_card" name="patient_insurance_card" placeholder="Primary Insured Insurance Card" accept=".pdf,.doc,.docx,.txt">
+                              <span><a target="_blank" href="<?php echo ($case->patient_insurance_card) ?>"><?php echo substr($case->patient_insurance_card, 8); ?></a></span>
+                            </div>
+                          </div>
+                        </div>
+                        <hr>
+                        <h4>Past Treatment Record</h4>
+                        <hr>
+                        <div class="form-group row">
+                          <div class="col-md-4">
+                            <label for="doctor_prescription">Doctor Prescription</label>
+                            <div>
+                              <input type="file" class="form-control" value="<?php echo ($case->doctor_prescription) ?>" id="doctor_prescription" name="doctor_prescription" placeholder="Doctor Prescription" accept=".pdf,.doc,.docx,.txt">
+                              <span><a target="_blank" href="<?php echo ($case->doctor_prescription) ?>"><?php echo substr($case->doctor_prescription, 8); ?></a></span>
+                            </div>
+                          </div>
+                          <div class="col-md-4">
+                            <label for="reports">Reports</label>
+                            <div>
+                              <input type="file" class="form-control" value="<?php echo ($case->reports) ?>" id="reports" name="reports" placeholder="Reports" accept=".pdf,.doc,.docx,.txt">
+                              <span><a target="_blank" href="<?php echo ($case->reports) ?>"><?php echo substr($case->reports, 8); ?></a></span>
+                            </div>
+                          </div>
+                          <div class="col-md-4">
+                            <label for="past_treatment_record">Past Treatment Records</label>
+                            <div>
+                              <input type="file" class="form-control" value="<?php echo ($case->past_treatment_record) ?>" id="past_treatment_record" name="past_treatment_record" placeholder="Past Treatment Records" accept=".pdf,.doc,.docx,.txt">
+                              <span><a target="_blank" href="<?php echo ($case->past_treatment_record) ?>"><?php echo substr($case->past_treatment_record, 8); ?></a></span>
+                            </div>
+                          </div>
+                        </div>
+                        <hr>
+                        <h4>Primary Insured KYC</h4>
+                        <hr>
+                        <div class="form-group row">
+                          <div class="col-md-4">
+                            <label for="primary_insured_adhaar">Primary Insured Adhaar Card</label>
+                            <div>
+                              <input type="file" class="form-control" value="<?php echo ($case->primary_insured_adhaar) ?>" id="primary_insured_adhaar" name="primary_insured_adhaar" placeholder="Primary Insured Adhaar Card" accept=".pdf,.doc,.docx,.txt">
+                              <span><a target="_blank" href="<?php echo ($case->primary_insured_adhaar) ?>"><?php echo substr($case->primary_insured_adhaar, 8); ?></a></span>
+                            </div>
+                          </div>
+                          <div class="col-md-4">
+                            <label for="primary_insured_insurance">Primary Insured Insurance Card</label>
+                            <div>
+                              <input type="file" class="form-control" value="<?php echo ($case->primary_insured_insurance) ?>" id="primary_insured_insurance" name="primary_insured_insurance" placeholder="Primary Insured Insurance Card" accept=".pdf,.doc,.docx,.txt">
+                              <span><a target="_blank" href="<?php echo ($case->primary_insured_insurance) ?>"><?php echo substr($case->primary_insured_insurance, 8); ?></a></span>
+                            </div>
+                          </div>
+                          <div class="col-md-4">
+                            <label for="primary_insured_pan">Primary Insured PAN Card</label>
+                            <div>
+                              <input type="file" class="form-control" value="<?php echo ($case->primary_insured_pan) ?>" id="primary_insured_pan" name="primary_insured_pan" placeholder="Primary Insured PAN Card" accept=".pdf,.doc,.docx,.txt">
+                              <span><a target="_blank" href="<?php echo ($case->primary_insured_pan) ?>"><?php echo substr($case->primary_insured_pan, 8); ?></a></span>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="form-group row">
+                          <div class="col-md-12">
+                            <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#modal-default-primary-insured-kyc" style="margin-top: 10px;">
+                              Submit
+                            </button>
+                          </div>
+                          <div class="modal fade" id="modal-default-primary-insured-kyc">
+                            <div class="modal-dialog">
+                              <div class="modal-content">
+                                <div class="modal-header">
+                                  <h4 class="modal-title">Primary Insured KYC Creation/Updation!</h4>
+                                  <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                    <span aria-hidden="true">&times;</span>
+                                  </button>
+                                </div>
+                                <div class="modal-body">
+                                  <p>Are you sure you want to create/update Primary Insured KYC?</p>
+                                </div>
+                                <div class="modal-footer justify-content-between">
+                                  <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                                  <button type="submit" name="submit-patient-kyc-details" class="btn btn-danger">Submit</button>
+                                </div>
+                              </div>
+                              <!-- /.modal-content -->
+                            </div>
+                            <!-- /.modal-dialog -->
+                          </div>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <?php
+              if ($case->case_type == '2') {
+              ?>
+
+              <!-- Cashless -->
+              <div class="col-md-12" id="cashless-details">
+                <div class="card">
+                  <div class="card-header">
+                    <h3 class="card-title">Cashless Details</h3>
                   </div>
                   <div class="card-body">
                     <div class="tab-content">
                       <form class="form-horizontal" method="post" enctype="multipart/form-data">
                         <div class="form-group row">
                           <div class="col-md-6">
-                            <label for="admission_date">Admission Date</label>
-                            <div class="input-group date" id="reservationdate3" data-target-input="nearest">
-                              <input type="text" value="<?php echo ($case->admission_date) ?>" class="form-control datetimepicker-input" data-target="#reservationdate3" name="admission_date" />
-                              <div class="input-group-append" data-target="#reservationdate3" data-toggle="datetimepicker">
-                                <div class="input-group-text"><i class="fa fa-calendar"></i></div>
-                              </div>
+                            <label for="pre_auth_doc">Pre Auth Doc</label>
+                            <div>
+                              <input type="file" class="form-control" value="<?php echo ($case->pre_auth_doc) ?>" id="pre_auth_doc" name="pre_auth_doc" placeholder="Settlement Letter" accept=".pdf,.doc,.docx,.txt">
+                              <span><a target="_blank" href="<?php echo ($case->pre_auth_doc) ?>"><?php echo substr($case->pre_auth_doc, 8); ?></a></span>
                             </div>
                           </div>
                           <div class="col-md-6">
-                            <label for="intimation_number">Intimation Number</label>
+                            <label for="pre_auth_number">Pre Auth Number</label>
                             <div>
-                              <input type="text" class="form-control" value="<?php echo ($case->intimation_number) ?>" id="intimation_number" name="intimation_number" placeholder="Intimation Number">
+                              <input type="text" class="form-control" value="<?php echo ($case->pre_auth_number) ?>" id="bankName" name="pre_auth_number" placeholder="Pre Auth Number">
                             </div>
                           </div>
-
                         </div>
                         <div class="form-group row">
-                          <div class="col-md-4 file-list" id="file-list">
-                            <div class="form-control" style="display:flex;align-items:center;justify-content:center;vertical-align:center">
-                              <div class="file-upload">
-                                <button style="color:black;padding:0px 10px 0px 10px;background:none" class="btn"><i class="fas fa-cloud-upload-alt"></i></button>
-                                <input type="file" id="intimation_document" name="intimation_document[]" accept=".pdf,.doc,.docx,.txt" multiple>
-                              </div>
-                              <label for="intimation_document">Intimation Document</label>
+                          <div class="col-md-4">
+                            <label for="initial_approval_doc">Initial Approval Doc</label>
+                            <div>
+                              <input type="file" class="form-control" value="<?php echo ($case->initial_approval_doc) ?>" id="initial_approval_doc" name="initial_approval_doc" placeholder="Initial Approval Doc" accept=".pdf,.doc,.docx,.txt">
+                              <span><a target="_blank" href="<?php echo ($case->initial_approval_doc) ?>"><?php echo substr($case->initial_approval_doc, 8); ?></a></span>
                             </div>
-                            <?php if (!empty($case->intimation_document)) : ?>
-                              <?php $documents = explode(',', $case->intimation_document); ?>
-                              <?php foreach ($documents as $document) : ?>
-                                <div class="file-item">
-                                  <i class="fas fa-file-alt"></i>
-                                  <a target="_blank" href="<?php echo $document; ?>"><?php echo substr($document, strrpos($document, '/') + 1); ?></a>
-                                </div>
-                              <?php endforeach; ?>
                           </div>
-                        <?php endif; ?>
+                          <div class="col-md-4">
+                            <label for="approval_amount">Approval Amount</label>
+                            <div>
+                              <input type="text" class="form-control" value="<?php echo ($case->approval_amount_cashless) ?>" id="approval_amount" name="approval_amount" placeholder="Approval Amount">
+                            </div>
+                          </div>
+                          <div class="col-md-4">
+                            <label for="final_approval_letter	">Final Approval Letter</label>
+                            <div>
+                              <input type="file" class="form-control" value="<?php echo ($case->final_approval_letter) ?>" id="final_approval_letter" name="final_approval_letter" placeholder="Initial Approval Doc" accept=".pdf,.doc,.docx,.txt">
+                              <span><a target="_blank" href="<?php echo ($case->final_approval_letter) ?>"><?php echo substr($case->final_approval_letter, 8); ?></a></span>
+                            </div>
+                          </div>
                         </div>
 
                         <div class="form-group row">
                           <div class="col-md-12">
-                            <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#modal-default-7" style="margin-top: 10px;">
+                            <label for="remark">User Remark</label>
+                            <div>
+                              <textarea class="form-control" name="user_remark" id="remark" placeholder="User Remark"><?php echo ($case->user_remark) ?></textarea>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div class="form-group row">
+                          <div class="col-md-12">
+                            <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#modal-default-cashless" style="margin-top: 10px;">
                               Submit
                             </button>
                           </div>
-                          <div class="modal fade" id="modal-default-7">
+                          <div class="modal fade" id="modal-default-cashless">
                             <div class="modal-dialog">
                               <div class="modal-content">
                                 <div class="modal-header">
-                                  <h4 class="modal-title">Reimbursement | Admitted Details Creation/Updation!</h4>
+                                  <h4 class="modal-title">Cashless Details Creation/Updation!</h4>
                                   <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                                     <span aria-hidden="true">&times;</span>
                                   </button>
                                 </div>
                                 <div class="modal-body">
-                                  <p>Are you sure you want to create/update Reimbursement | Admitted Details?</p>
+                                  <p>Are you sure you want to create/update Cashless Details?</p>
                                 </div>
                                 <div class="modal-footer justify-content-between">
                                   <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
-                                  <button type="submit" name="submit-patient-reimbursement-details" class="btn btn-danger">Submit</button>
+                                  <button type="submit" name="submit-patient-cashless-details" class="btn btn-danger">Submit</button>
                                 </div>
                               </div>
                               <!-- /.modal-content -->
@@ -2994,79 +3460,7 @@ if (strlen($_SESSION['id'] == 0)) {
                 </div>
               </div>
 
-              <!-- bank details -->
-              <div class="col-md-12" id="bank-details">
-                <div class="card">
-                  <div class="card-header">
-                    <h3 class="card-title">Bank Details</h3>
-                  </div>
-                  <div class="card-body">
-                    <div class="tab-content">
-                      <form class="form-horizontal" method="post">
-                        <div class="form-group row">
-                          <div class="col-md-6">
-                            <label for="bankName">Bank Name</label>
-                            <div>
-                              <input type="text" class="form-control" value="<?php echo ($case->bank_name) ?>" id="bankName" name="bank_name" placeholder="Bank Name">
-                            </div>
-                          </div>
-                          <div class="col-md-6">
-                            <label for="accountNumber">Account Number</label>
-                            <div>
-                              <input type="text" class="form-control" value="<?php echo ($case->account_number) ?>" id="accountNumber" name="account_number" placeholder="Account Number">
-                            </div>
-                          </div>
-
-                        </div>
-                        <div class="form-group row">
-                          <div class="col-md-6">
-                            <label for="ifsc_code">IFSC Code</label>
-                            <div>
-                              <input type="text" class="form-control" value="<?php echo ($case->ifsc_code) ?>" id="ifsc_code" name="ifsc_code" placeholder="IFSC Code">
-                            </div>
-                          </div>
-                          <div class="col-md-6">
-                            <label for="bank_details_documents">Bank Details Documents</label>
-                            <div>
-                              <input type="text" class="form-control" value="<?php echo ($case->bank_details_documents) ?>" id="bank_details_documents" name="bank_details_documents" placeholder="Bank Details Documents">
-                            </div>
-                          </div>
-
-                        </div>
-
-                        <div class="form-group row">
-                          <div class="col-md-12">
-                            <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#modal-default-4" style="margin-top: 10px;">
-                              Submit
-                            </button>
-                          </div>
-                          <div class="modal fade" id="modal-default-4">
-                            <div class="modal-dialog">
-                              <div class="modal-content">
-                                <div class="modal-header">
-                                  <h4 class="modal-title">Bank Details Creation/Updation!</h4>
-                                  <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                                    <span aria-hidden="true">&times;</span>
-                                  </button>
-                                </div>
-                                <div class="modal-body">
-                                  <p>Are you sure you want to create/update Payment Details?</p>
-                                </div>
-                                <div class="modal-footer justify-content-between">
-                                  <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
-                                  <button type="submit" name="submit-patient-bank-details" class="btn btn-danger">Submit</button>
-                                </div>
-                              </div>
-                              <!-- /.modal-content -->
-                            </div>
-                            <!-- /.modal-dialog -->
-                          </div>
-                        </div>
-                      </form>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <?php } ?>
 
               <!-- policy remarks -->
               <div class="col-md-12" id="policy-remarks">
@@ -3393,6 +3787,85 @@ if (strlen($_SESSION['id'] == 0)) {
                                 <div class="modal-footer justify-content-between">
                                   <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
                                   <button type="submit" name="submit-patient-insurrance-details" class="btn btn-danger">Submit</button>
+                                </div>
+                              </div>
+                              <!-- /.modal-content -->
+                            </div>
+                            <!-- /.modal-dialog -->
+                          </div>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- reimbursement -->
+              <div class="col-md-12" id="reimbursement-adminttedOn">
+                <div class="card">
+                  <div class="card-header">
+                    <h3 class="card-title">Reimbursement | Admintted on</h3>
+                  </div>
+                  <div class="card-body">
+                    <div class="tab-content">
+                      <form class="form-horizontal" method="post" enctype="multipart/form-data">
+                        <div class="form-group row">
+                          <div class="col-md-6">
+                            <label for="admission_date">Admission Date</label>
+                            <div class="input-group date" id="reservationdate3" data-target-input="nearest">
+                              <input type="text" value="<?php echo ($case->admission_date) ?>" class="form-control datetimepicker-input" data-target="#reservationdate3" name="admission_date" />
+                              <div class="input-group-append" data-target="#reservationdate3" data-toggle="datetimepicker">
+                                <div class="input-group-text"><i class="fa fa-calendar"></i></div>
+                              </div>
+                            </div>
+                          </div>
+                          <div class="col-md-6">
+                            <label for="intimation_number">Intimation Number</label>
+                            <div>
+                              <input type="text" class="form-control" value="<?php echo ($case->intimation_number) ?>" id="intimation_number" name="intimation_number" placeholder="Intimation Number">
+                            </div>
+                          </div>
+
+                        </div>
+                        <div class="form-group row">
+                          <div class="col-md-6">
+                            <label for="intimation_document">Query Resolution Doc</label>
+                            <div>
+                              <input type="file" class="form-control" value="<?php echo ($case->intimation_document) ?>" id="intimation_document" name="intimation_document[]" placeholder="Intimation Document" accept=".pdf,.doc,.docx,.txt" multiple>
+                              <?php if (!empty($case->intimation_document)) : ?>
+                                <?php $documents = explode(',', $case->intimation_document); ?>
+                                <?php foreach ($documents as $document) : ?>
+                                  <div class="file-item">
+                                    <i class="fas fa-file-alt"></i>
+                                    <a target="_blank" href="<?php echo $document; ?>"><?php echo substr($document, strrpos($document, '/') + 1); ?></a>
+                                  </div>
+                                <?php endforeach; ?>
+                            </div>
+                          <?php endif; ?>
+                          </div>
+                        </div>
+
+                        <div class="form-group row">
+                          <div class="col-md-12">
+                            <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#modal-default-7" style="margin-top: 10px;">
+                              Submit
+                            </button>
+                          </div>
+                          <div class="modal fade" id="modal-default-7">
+                            <div class="modal-dialog">
+                              <div class="modal-content">
+                                <div class="modal-header">
+                                  <h4 class="modal-title">Reimbursement | Admitted Details Creation/Updation!</h4>
+                                  <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                    <span aria-hidden="true">&times;</span>
+                                  </button>
+                                </div>
+                                <div class="modal-body">
+                                  <p>Are you sure you want to create/update Reimbursement | Admitted Details?</p>
+                                </div>
+                                <div class="modal-footer justify-content-between">
+                                  <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                                  <button type="submit" name="submit-patient-reimbursement-details" class="btn btn-danger">Submit</button>
                                 </div>
                               </div>
                               <!-- /.modal-content -->
@@ -3795,6 +4268,184 @@ if (strlen($_SESSION['id'] == 0)) {
                                 <div class="modal-footer justify-content-between">
                                   <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
                                   <button type="submit" name="submit-patient-policy-holder-details" class="btn btn-danger">Submit</button>
+                                </div>
+                              </div>
+                              <!-- /.modal-content -->
+                            </div>
+                            <!-- /.modal-dialog -->
+                          </div>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- loan details -->
+              <div class="col-md-12" id="loan-details">
+                <div class="card">
+                  <div class="card-header">
+                    <h3 class="card-title">Pre Loan Details</h3>
+                  </div>
+                  <div class="card-body">
+                    <div class="tab-content">
+                      <form class="form-horizontal" method="post" enctype="multipart/form-data">
+                        <div class="form-group row">
+                          <div class="col-md-6">
+                            <label for="cardHolderName">Primary Card Holder Name</label>
+                            <div>
+                              <input type="text" class="form-control" value="<?php echo ($case->primary_card_holder_name) ?>" id="cardHolderName" name="primary_card_holder_name" placeholder="Primary Card Holder Name">
+                            </div>
+                          </div>
+                          <div class="col-md-6">
+                            <label for="cibilScore">CIBIL Score</label>
+                            <div>
+                              <input type="text" class="form-control" value="<?php echo ($case->cibil_score) ?>" id="cibilScore" name="cibil_score" placeholder="CIBIL Score">
+                            </div>
+                          </div>
+
+                        </div>
+                        <div class="form-group row">
+                          <div class="col-md-4">
+                            <label for="iseligible">Is Elgible</label>
+                            <select class="form-control select2" name="iseligible" id="iseligible" style="width: 100%;">
+                              <option disabled <?php if (!$case->is_eligible) echo 'selected="selected"'; ?>>Select is Eligible</option>
+                              <option value="Yes" <?php if ($case->is_eligible == 'Yes') echo 'selected="selected"'; ?>>YES</option>
+                              <option value="NO" <?php if ($case->is_eligible == 'No') echo 'selected="selected"'; ?>>NO</option>
+                            </select>
+                          </div>
+                          <div class="col-md-4">
+                            <label for="ispatientcounseled">Is Patient Counseled</label>
+                            <select class="form-control select2" name="ispatientcounseled" id="ispatientcounseled" style="width: 100%;">
+                              <option disabled <?php if (!$case->is_patient_counseled) echo 'selected="selected"'; ?>>Select is Patient Counseled</option>
+                              <option value="Yes" <?php if ($case->is_patient_counseled == 'Yes') echo 'selected="selected"'; ?>>YES</option>
+                              <option value="NO" <?php if ($case->is_patient_counseled == 'No') echo 'selected="selected"'; ?>>NO</option>
+                            </select>
+                          </div>
+                          <div class="col-md-4">
+                            <label for="pannumber">PAN Number</label>
+                            <input type="text" value="<?php echo ($case->pan_number) ?>" class="form-control" name="pan_number" id="pannumber" placeholder="PAN Number">
+                          </div>
+
+                        </div>
+
+                        <div class="form-group row">
+                          <div class="col-md-6">
+                            <label for="cibil_approval_doc">CIBIL Approval Doc</label>
+                            <input type="file" class="form-control" name="cibil_approval_doc" id="cibil_approval_doc" placeholder="CIBIL Approval Doc" accept=".pdf,.doc,.docx,.txt" value="<?php echo ($case->cibil_approval_doc) ?>">
+                            <span><a target="_blank" href="<?php echo ($case->cibil_approval_doc) ?>"><?php echo substr($case->cibil_approval_doc, 8); ?></a></span>
+                          </div>
+                          <div class="col-md-6">
+                            <label for="pan_card_copy">PAN Card Copy</label>
+                            <input type="file" value="<?php echo ($case->pan_card_copy) ?>" class="form-control" name="pan_card_copy" id="pan_card_copy" placeholder="PAN Card Copy" accept=".pdf,.doc,.docx,.txt">
+                            <span><a target="_blank" href="<?php echo ($case->pan_card_copy) ?>"><?php echo substr($case->pan_card_copy, 8); ?></a></span>
+                          </div>
+
+                        </div>
+                        <div class="form-group row">
+                          <div class="col-md-12">
+                            <label for="remark">User Remark</label>
+                            <div>
+                              <textarea class="form-control" name="userremark" id="remark" placeholder="Remark"><?php echo ($case->remark) ?></textarea>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div class="form-group row">
+                          <div class="col-md-12">
+                            <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#modal-default-2" style="margin-top: 10px;">
+                              Submit
+                            </button>
+                          </div>
+                          <div class="modal fade" id="modal-default-2">
+                            <div class="modal-dialog">
+                              <div class="modal-content">
+                                <div class="modal-header">
+                                  <h4 class="modal-title">Loan Details Updation!</h4>
+                                  <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                    <span aria-hidden="true">&times;</span>
+                                  </button>
+                                </div>
+                                <div class="modal-body">
+                                  <p>Are you sure you want to update your loan details?</p>
+                                </div>
+                                <div class="modal-footer justify-content-between">
+                                  <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                                  <button type="submit" name="submit-patient-loan-details" class="btn btn-danger">Submit</button>
+                                </div>
+                              </div>
+                              <!-- /.modal-content -->
+                            </div>
+                            <!-- /.modal-dialog -->
+                          </div>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- bank details -->
+              <div class="col-md-12" id="bank-details">
+                <div class="card">
+                  <div class="card-header">
+                    <h3 class="card-title">Bank Details</h3>
+                  </div>
+                  <div class="card-body">
+                    <div class="tab-content">
+                      <form class="form-horizontal" method="post">
+                        <div class="form-group row">
+                          <div class="col-md-6">
+                            <label for="bankName">Bank Name</label>
+                            <div>
+                              <input type="text" class="form-control" value="<?php echo ($case->bank_name) ?>" id="bankName" name="bank_name" placeholder="Bank Name">
+                            </div>
+                          </div>
+                          <div class="col-md-6">
+                            <label for="accountNumber">Account Number</label>
+                            <div>
+                              <input type="text" class="form-control" value="<?php echo ($case->account_number) ?>" id="accountNumber" name="account_number" placeholder="Account Number">
+                            </div>
+                          </div>
+
+                        </div>
+                        <div class="form-group row">
+                          <div class="col-md-6">
+                            <label for="ifsc_code">IFSC Code</label>
+                            <div>
+                              <input type="text" class="form-control" value="<?php echo ($case->ifsc_code) ?>" id="ifsc_code" name="ifsc_code" placeholder="IFSC Code">
+                            </div>
+                          </div>
+                          <div class="col-md-6">
+                            <label for="bank_details_documents">Bank Details Documents</label>
+                            <div>
+                              <input type="text" class="form-control" value="<?php echo ($case->bank_details_documents) ?>" id="bank_details_documents" name="bank_details_documents" placeholder="Bank Details Documents">
+                            </div>
+                          </div>
+
+                        </div>
+
+                        <div class="form-group row">
+                          <div class="col-md-12">
+                            <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#modal-default-4" style="margin-top: 10px;">
+                              Submit
+                            </button>
+                          </div>
+                          <div class="modal fade" id="modal-default-4">
+                            <div class="modal-dialog">
+                              <div class="modal-content">
+                                <div class="modal-header">
+                                  <h4 class="modal-title">Bank Details Creation/Updation!</h4>
+                                  <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                    <span aria-hidden="true">&times;</span>
+                                  </button>
+                                </div>
+                                <div class="modal-body">
+                                  <p>Are you sure you want to create/update Payment Details?</p>
+                                </div>
+                                <div class="modal-footer justify-content-between">
+                                  <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                                  <button type="submit" name="submit-patient-bank-details" class="btn btn-danger">Submit</button>
                                 </div>
                               </div>
                               <!-- /.modal-content -->
@@ -4211,287 +4862,8 @@ if (strlen($_SESSION['id'] == 0)) {
                 </div>
               </div>
 
-              <!-- pod -->
-              <div class="col-md-12" id="pod">
-                <div class="card">
-                  <div class="card-header">
-                    <h3 class="card-title">POD</h3>
-                  </div>
-                  <div class="card-body">
-                    <div class="tab-content">
-                      <form class="form-horizontal" method="post" enctype="multipart/form-data">
-                        <div class="form-group row">
-                          <div class="col-md-6">
-                            <label for="pod_number">POD Number</label>
-                            <div>
-                              <input type="text" class="form-control" value="<?php echo ($case->pod_number) ?>" id="bankName" name="pod_number" placeholder="POD Number">
-                            </div>
-                          </div>
-                          <div class="col-md-6">
-                            <label for="courier_company">Courier Company</label>
-                            <div>
-                              <input type="text" class="form-control" value="<?php echo ($case->courier_company) ?>" id="courier_company" name="courier_company" placeholder="Courier Company">
-                            </div>
-                          </div>
-
-                        </div>
-                        <div class="form-group row">
-                          <div class="col-md-6">
-                            <label for="date_of_file_dispatch">Date Of File Dispatch</label>
-                            <div class="input-group date" id="reservationdate2" data-target-input="nearest">
-                              <input type="text" value="<?php echo ($case->date_of_file_dispatch) ?>" class="form-control datetimepicker-input" data-target="#reservationdate2" name="date_of_file_dispatch" />
-                              <div class="input-group-append" data-target="#reservationdate2" data-toggle="datetimepicker">
-                                <div class="input-group-text"><i class="fa fa-calendar"></i></div>
-                              </div>
-                            </div>
-                          </div>
-                          <div class="col-md-6">
-                            <label for="document_dispatch_by">Document Dispatched By</label>
-                            <div>
-                              <input type="text" class="form-control" value="<?php echo ($case->document_dispatch_by) ?>" id="document_dispatch_by" name="document_dispatch_by" placeholder="Document Dispatched By">
-                            </div>
-                          </div>
-                        </div>
-                        <div class="form-group row">
-                          <div class="col-md-6">
-                            <label for="pod_document">POD Document</label>
-                            <div>
-                              <input type="file" class="form-control" value="<?php echo ($case->pod_document) ?>" id="pod_document" name="pod_document" placeholder="POD Document" accept=".pdf,.doc,.docx,.txt">
-                              <span><a target="_blank" href="<?php echo ($case->pod_document) ?>"><?php echo substr($case->pod_document, 8); ?></a></span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div class="form-group row">
-                          <div class="col-md-12">
-                            <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#modal-default-5" style="margin-top: 10px;">
-                              Submit
-                            </button>
-                          </div>
-                          <div class="modal fade" id="modal-default-5">
-                            <div class="modal-dialog">
-                              <div class="modal-content">
-                                <div class="modal-header">
-                                  <h4 class="modal-title">POD Details Creation/Updation!</h4>
-                                  <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                                    <span aria-hidden="true">&times;</span>
-                                  </button>
-                                </div>
-                                <div class="modal-body">
-                                  <p>Are you sure you want to create/update POD Details?</p>
-                                </div>
-                                <div class="modal-footer justify-content-between">
-                                  <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
-                                  <button type="submit" name="submit-patient-pod-details" class="btn btn-danger">Submit</button>
-                                </div>
-                              </div>
-                              <!-- /.modal-content -->
-                            </div>
-                            <!-- /.modal-dialog -->
-                          </div>
-                        </div>
-                      </form>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- loan details -->
-              <div class="col-md-12" id="loan-details">
-                <div class="card">
-                  <div class="card-header">
-                    <h3 class="card-title">Loan Details</h3>
-                  </div>
-                  <div class="card-body">
-                    <div class="tab-content">
-                      <form class="form-horizontal" method="post" enctype="multipart/form-data">
-                        <div class="form-group row">
-                          <div class="col-md-6">
-                            <label for="cardHolderName">Primary Card Holder Name</label>
-                            <div>
-                              <input type="text" class="form-control" value="<?php echo ($case->primary_card_holder_name) ?>" id="cardHolderName" name="primary_card_holder_name" placeholder="Primary Card Holder Name">
-                            </div>
-                          </div>
-                          <div class="col-md-6">
-                            <label for="cibilScore">CIBIL Score</label>
-                            <div>
-                              <input type="text" class="form-control" value="<?php echo ($case->cibil_score) ?>" id="cibilScore" name="cibil_score" placeholder="CIBIL Score">
-                            </div>
-                          </div>
-
-                        </div>
-                        <div class="form-group row">
-                          <div class="col-md-4">
-                            <label for="iseligible">Is Elgible</label>
-                            <select class="form-control select2" name="iseligible" id="iseligible" style="width: 100%;">
-                              <option disabled <?php if (!$case->is_eligible) echo 'selected="selected"'; ?>>Select is Eligible</option>
-                              <option value="Yes" <?php if ($case->is_eligible == 'Yes') echo 'selected="selected"'; ?>>YES</option>
-                              <option value="NO" <?php if ($case->is_eligible == 'No') echo 'selected="selected"'; ?>>NO</option>
-                            </select>
-                          </div>
-                          <div class="col-md-4">
-                            <label for="ispatientcounseled">Is Patient Counseled</label>
-                            <select class="form-control select2" name="ispatientcounseled" id="ispatientcounseled" style="width: 100%;">
-                              <option disabled <?php if (!$case->is_patient_counseled) echo 'selected="selected"'; ?>>Select is Patient Counseled</option>
-                              <option value="Yes" <?php if ($case->is_patient_counseled == 'Yes') echo 'selected="selected"'; ?>>YES</option>
-                              <option value="NO" <?php if ($case->is_patient_counseled == 'No') echo 'selected="selected"'; ?>>NO</option>
-                            </select>
-                          </div>
-                          <div class="col-md-4">
-                            <label for="pannumber">PAN Number</label>
-                            <input type="text" value="<?php echo ($case->pan_number) ?>" class="form-control" name="pan_number" id="pannumber" placeholder="PAN Number">
-                          </div>
-
-                        </div>
-
-                        <div class="form-group row">
-                          <div class="col-md-6">
-                            <label for="cibil_approval_doc">CIBIL Approval Doc</label>
-                            <input type="file" class="form-control" name="cibil_approval_doc" id="cibil_approval_doc" placeholder="CIBIL Approval Doc" accept=".pdf,.doc,.docx,.txt" value="<?php echo ($case->cibil_approval_doc) ?>">
-                            <span><a target="_blank" href="<?php echo ($case->cibil_approval_doc) ?>"><?php echo substr($case->cibil_approval_doc, 8); ?></a></span>
-                          </div>
-                          <div class="col-md-6">
-                            <label for="pan_card_copy">PAN Card Copy</label>
-                            <input type="file" value="<?php echo ($case->pan_card_copy) ?>" class="form-control" name="pan_card_copy" id="pan_card_copy" placeholder="PAN Card Copy" accept=".pdf,.doc,.docx,.txt">
-                            <span><a target="_blank" href="<?php echo ($case->pan_card_copy) ?>"><?php echo substr($case->pan_card_copy, 8); ?></a></span>
-                          </div>
-
-                        </div>
-                        <div class="form-group row">
-                          <div class="col-md-12">
-                            <label for="remark">User Remark</label>
-                            <div>
-                              <textarea class="form-control" name="userremark" id="remark" placeholder="Remark"><?php echo ($case->remark) ?></textarea>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div class="form-group row">
-                          <div class="col-md-12">
-                            <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#modal-default-2" style="margin-top: 10px;">
-                              Submit
-                            </button>
-                          </div>
-                          <div class="modal fade" id="modal-default-2">
-                            <div class="modal-dialog">
-                              <div class="modal-content">
-                                <div class="modal-header">
-                                  <h4 class="modal-title">Loan Details Updation!</h4>
-                                  <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                                    <span aria-hidden="true">&times;</span>
-                                  </button>
-                                </div>
-                                <div class="modal-body">
-                                  <p>Are you sure you want to update your loan details?</p>
-                                </div>
-                                <div class="modal-footer justify-content-between">
-                                  <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
-                                  <button type="submit" name="submit-patient-loan-details" class="btn btn-danger">Submit</button>
-                                </div>
-                              </div>
-                              <!-- /.modal-content -->
-                            </div>
-                            <!-- /.modal-dialog -->
-                          </div>
-                        </div>
-                      </form>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- payment details -->
-              <div class="col-md-12" id="payment-details">
-                <div class="card">
-                  <div class="card-header">
-                    <h3 class="card-title">Payment Details</h3>
-                  </div>
-                  <div class="card-body">
-                    <div class="tab-content">
-                      <form class="form-horizontal" method="post" enctype="multipart/form-data">
-                        <div class="form-group row">
-                          <div class="col-md-6">
-                            <label for="paymentType">Payment Type</label>
-                            <div>
-                              <input type="text" class="form-control" value="<?php echo ($case->payment_type) ?>" id="paymentType" name="payment_type" placeholder="Payment Type">
-                            </div>
-                          </div>
-                          <div class="col-md-6">
-                            <label for="loanSacntionLetter">Loan Sanction Letter</label>
-                            <div>
-                              <input type="file" class="form-control" value="<?php echo ($case->loan_sanction_letter) ?>" id="loanSacntionLetter" name="loan_sanction_letter" placeholder="Loan Sanction Letter" accept=".pdf,.doc,.docx,.txt">
-                              <span><a target="_blank" href="<?php echo ($case->loan_sanction_letter) ?>"><?php echo substr($case->loan_sanction_letter, 8); ?></a></span>
-                            </div>
-                          </div>
-
-                        </div>
-                        <div class="form-group row">
-                          <div class="col-md-6">
-                            <label for="amount">Amount</label>
-                            <div>
-                              <input type="text" class="form-control" value="<?php echo ($case->amount) ?>" id="amount" name="amount" placeholder="Amount">
-                            </div>
-                          </div>
-                          <div class="col-md-6">
-                            <label for="nbfc">NBFC</label>
-                            <div>
-                              <input type="text" class="form-control" value="<?php echo ($case->nbfc) ?>" id="nbfc" name="nbfc" placeholder="NBFC">
-                            </div>
-                          </div>
-
-                        </div>
-                        <div class="form-group row">
-                          <div class="col-md-6">
-                            <label for="sanction_number">Sanction Number</label>
-                            <div>
-                              <input type="text" class="form-control" value="<?php echo ($case->sanction_number) ?>" id="sanction_number" name="sanction_number" placeholder="Sanction Number">
-                            </div>
-                          </div>
-                          <div class="col-md-6">
-                            <label for="loan_booked_to">Loan Booked To</label>
-                            <div>
-                              <input type="text" class="form-control" value="<?php echo ($case->loan_booked_to) ?>" id="loan_booked_to" name="loan_booked_to" placeholder="Loan Booked To">
-                            </div>
-                          </div>
-
-                        </div>
-
-                        <div class="form-group row">
-                          <div class="col-md-12">
-                            <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#modal-default-3" style="margin-top: 10px;">
-                              Submit
-                            </button>
-                          </div>
-                          <div class="modal fade" id="modal-default-3">
-                            <div class="modal-dialog">
-                              <div class="modal-content">
-                                <div class="modal-header">
-                                  <h4 class="modal-title">Payment Creation/Updation!</h4>
-                                  <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                                    <span aria-hidden="true">&times;</span>
-                                  </button>
-                                </div>
-                                <div class="modal-body">
-                                  <p>Are you sure you want to create/update Payment Details?</p>
-                                </div>
-                                <div class="modal-footer justify-content-between">
-                                  <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
-                                  <button type="submit" name="submit-patient-payment-details" class="btn btn-danger">Submit</button>
-                                </div>
-                              </div>
-                              <!-- /.modal-content -->
-                            </div>
-                            <!-- /.modal-dialog -->
-                          </div>
-                        </div>
-                      </form>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
               <!-- File Dispatch -->
-              <div class="col-md-12" id="pod">
+              <div class="col-md-12" id="file-dispatch">
                 <div class="card">
                   <div class="card-header">
                     <h3 class="card-title">File Dispatch</h3>
@@ -4692,6 +5064,432 @@ if (strlen($_SESSION['id'] == 0)) {
                 </div>
               </div>
 
+              <!-- pod -->
+              <div class="col-md-12" id="pod">
+                <div class="card">
+                  <div class="card-header">
+                    <h3 class="card-title">POD</h3>
+                  </div>
+                  <div class="card-body">
+                    <div class="tab-content">
+                      <form class="form-horizontal" method="post" enctype="multipart/form-data">
+                        <div class="form-group row">
+                          <div class="col-md-6">
+                            <label for="pod_number">POD Number</label>
+                            <div>
+                              <input type="text" class="form-control" value="<?php echo ($case->pod_number) ?>" id="bankName" name="pod_number" placeholder="POD Number">
+                            </div>
+                          </div>
+                          <div class="col-md-6">
+                            <label for="courier_company">Courier Company</label>
+                            <div>
+                              <input type="text" class="form-control" value="<?php echo ($case->courier_company) ?>" id="courier_company" name="courier_company" placeholder="Courier Company">
+                            </div>
+                          </div>
+
+                        </div>
+                        <div class="form-group row">
+                          <div class="col-md-6">
+                            <label for="date_of_file_dispatch">Date Of File Dispatch</label>
+                            <div class="input-group date" id="reservationdate2" data-target-input="nearest">
+                              <input type="text" value="<?php echo ($case->date_of_file_dispatch) ?>" class="form-control datetimepicker-input" data-target="#reservationdate2" name="date_of_file_dispatch" />
+                              <div class="input-group-append" data-target="#reservationdate2" data-toggle="datetimepicker">
+                                <div class="input-group-text"><i class="fa fa-calendar"></i></div>
+                              </div>
+                            </div>
+                          </div>
+                          <div class="col-md-6">
+                            <label for="document_dispatch_by">Document Dispatched By</label>
+                            <div>
+                              <input type="text" class="form-control" value="<?php echo ($case->document_dispatch_by) ?>" id="document_dispatch_by" name="document_dispatch_by" placeholder="Document Dispatched By">
+                            </div>
+                          </div>
+                        </div>
+                        <div class="form-group row">
+                          <div class="col-md-6">
+                            <label for="pod_document">POD Document</label>
+                            <div>
+                              <input type="file" class="form-control" value="<?php echo ($case->pod_document) ?>" id="pod_document" name="pod_document" placeholder="POD Document" accept=".pdf,.doc,.docx,.txt">
+                              <span><a target="_blank" href="<?php echo ($case->pod_document) ?>"><?php echo substr($case->pod_document, 8); ?></a></span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div class="form-group row">
+                          <div class="col-md-12">
+                            <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#modal-default-5" style="margin-top: 10px;">
+                              Submit
+                            </button>
+                          </div>
+                          <div class="modal fade" id="modal-default-5">
+                            <div class="modal-dialog">
+                              <div class="modal-content">
+                                <div class="modal-header">
+                                  <h4 class="modal-title">POD Details Creation/Updation!</h4>
+                                  <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                    <span aria-hidden="true">&times;</span>
+                                  </button>
+                                </div>
+                                <div class="modal-body">
+                                  <p>Are you sure you want to create/update POD Details?</p>
+                                </div>
+                                <div class="modal-footer justify-content-between">
+                                  <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                                  <button type="submit" name="submit-patient-pod-details" class="btn btn-danger">Submit</button>
+                                </div>
+                              </div>
+                              <!-- /.modal-content -->
+                            </div>
+                            <!-- /.modal-dialog -->
+                          </div>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- payment details -->
+              <div class="col-md-12" id="payment-details">
+                <div class="card">
+                  <div class="card-header">
+                    <h3 class="card-title">Post Loan Details</h3>
+                  </div>
+                  <div class="card-body">
+                    <div class="tab-content">
+                      <form class="form-horizontal" method="post" enctype="multipart/form-data">
+                        <div class="form-group row">
+                          <div class="col-md-6">
+                            <label for="paymentType">Payment Type</label>
+                            <div>
+                              <input type="text" class="form-control" value="<?php echo ($case->payment_type) ?>" id="paymentType" name="payment_type" placeholder="Payment Type">
+                            </div>
+                          </div>
+                          <div class="col-md-6">
+                            <label for="loanSacntionLetter">Loan Sanction Letter</label>
+                            <div>
+                              <input type="file" class="form-control" value="<?php echo ($case->loan_sanction_letter) ?>" id="loanSacntionLetter" name="loan_sanction_letter" placeholder="Loan Sanction Letter" accept=".pdf,.doc,.docx,.txt">
+                              <span><a target="_blank" href="<?php echo ($case->loan_sanction_letter) ?>"><?php echo substr($case->loan_sanction_letter, 8); ?></a></span>
+                            </div>
+                          </div>
+
+                        </div>
+                        <div class="form-group row">
+                          <div class="col-md-6">
+                            <label for="amount">Amount</label>
+                            <div>
+                              <input type="text" class="form-control" value="<?php echo ($case->amount) ?>" id="amount" name="amount" placeholder="Amount">
+                            </div>
+                          </div>
+                          <div class="col-md-6">
+                            <label for="nbfc">NBFC</label>
+                            <div>
+                              <input type="text" class="form-control" value="<?php echo ($case->nbfc) ?>" id="nbfc" name="nbfc" placeholder="NBFC">
+                            </div>
+                          </div>
+
+                        </div>
+                        <div class="form-group row">
+                          <div class="col-md-6">
+                            <label for="sanction_number">Sanction Number</label>
+                            <div>
+                              <input type="text" class="form-control" value="<?php echo ($case->sanction_number) ?>" id="sanction_number" name="sanction_number" placeholder="Sanction Number">
+                            </div>
+                          </div>
+                          <div class="col-md-6">
+                            <label for="loan_booked_to">Loan Booked To</label>
+                            <div>
+                              <input type="text" class="form-control" value="<?php echo ($case->loan_booked_to) ?>" id="loan_booked_to" name="loan_booked_to" placeholder="Loan Booked To">
+                            </div>
+                          </div>
+
+                        </div>
+
+                        <div class="form-group row">
+                          <div class="col-md-12">
+                            <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#modal-default-3" style="margin-top: 10px;">
+                              Submit
+                            </button>
+                          </div>
+                          <div class="modal fade" id="modal-default-3">
+                            <div class="modal-dialog">
+                              <div class="modal-content">
+                                <div class="modal-header">
+                                  <h4 class="modal-title">Payment Creation/Updation!</h4>
+                                  <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                    <span aria-hidden="true">&times;</span>
+                                  </button>
+                                </div>
+                                <div class="modal-body">
+                                  <p>Are you sure you want to create/update Payment Details?</p>
+                                </div>
+                                <div class="modal-footer justify-content-between">
+                                  <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                                  <button type="submit" name="submit-patient-payment-details" class="btn btn-danger">Submit</button>
+                                </div>
+                              </div>
+                              <!-- /.modal-content -->
+                            </div>
+                            <!-- /.modal-dialog -->
+                          </div>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- status update -->
+              <div class="col-md-12" id="status-update-details">
+                <div class="card">
+                  <div class="card-header">
+                    <h3 class="card-title">Status Update Details</h3>
+                  </div>
+                  <div class="card-body">
+                    <div class="tab-content">
+                      <form class="form-horizontal" method="post" enctype="multipart/form-data">
+                        <div class="form-group row">
+                          <div class="col-md-4">
+                            <label for="claim_number">Claim Number</label>
+                            <div>
+                              <input type="text" class="form-control" value="<?php echo ($case->claim_number) ?>" id="bankName" name="claim_number" placeholder="Claim Number">
+                            </div>
+                          </div>
+                          <div class="col-md-4">
+                            <label for="utr_number">UTR Number</label>
+                            <div>
+                              <input type="text" class="form-control" value="<?php echo ($case->utr_number) ?>" id="bankName" name="utr_number" placeholder="UTR Number">
+                            </div>
+                          </div>
+                          <div class="col-md-4">
+                            <label for="approval_amount">Approval Amount</label>
+                            <div>
+                              <input type="text" class="form-control" value="<?php echo ($case->approval_amount) ?>" id="bankName" name="approval_amount" placeholder="Approval Amount">
+                            </div>
+                          </div>
+                        </div>
+                        <div class="form-group row">
+                          <div class="col-md-6">
+                            <label for="approval_date">Approval Date</label>
+                            <div class="input-group date" id="reservationdate9" data-target-input="nearest">
+                              <input type="text" value="<?php echo ($case->approval_date) ?>" class="form-control datetimepicker-input" data-target="#reservationdate9" name="approval_date" />
+                              <div class="input-group-append" data-target="#reservationdate9" data-toggle="datetimepicker">
+                                <div class="input-group-text"><i class="fa fa-calendar"></i></div>
+                              </div>
+                            </div>
+                          </div>
+                          <div class="col-md-6">
+                            <label for="settlement_date">Settlement Date</label>
+                            <div class="input-group date" id="reservationdate10" data-target-input="nearest">
+                              <input type="text" value="<?php echo ($case->settlement_date) ?>" class="form-control datetimepicker-input" data-target="#reservationdate10" name="settlement_date" />
+                              <div class="input-group-append" data-target="#reservationdate10" data-toggle="datetimepicker">
+                                <div class="input-group-text"><i class="fa fa-calendar"></i></div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="form-group row">
+                          <div class="col-md-6">
+                            <label for="settlement_letter">Settlement Letter</label>
+                            <div>
+                              <input type="file" class="form-control" value="<?php echo ($case->settlement_letter) ?>" id="settlement_letter" name="settlement_letter" placeholder="Settlement Letter" accept=".pdf,.doc,.docx,.txt">
+                              <span><a target="_blank" href="<?php echo ($case->settlement_letter) ?>"><?php echo substr($case->settlement_letter, 8); ?></a></span>
+                            </div>
+                          </div>
+                          <div class="col-md-6">
+                            <label for="query_resolution_doc_status">Query Resolution Doc</label>
+                            <div>
+                              <input type="file" class="form-control" value="<?php echo ($case->query_resolution_doc_status) ?>" id="query_resolution_doc_status" name="query_resolution_doc_status" placeholder="Query Resolution Doc" accept=".pdf,.doc,.docx,.txt">
+                              <span><a target="_blank" href="<?php echo ($case->query_resolution_doc_status) ?>"><?php echo substr($case->query_resolution_doc_status, 8); ?></a></span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div class="form-group row">
+                          <div class="col-md-3">
+                            <label for="cheque_amount">Cheque Amount</label>
+                            <div>
+                              <input type="text" class="form-control" value="<?php echo ($case->cheque_amount) ?>" id="bankName" name="cheque_amount" placeholder="Cheque Amount">
+                            </div>
+                          </div>
+                          <div class="col-md-3">
+                            <label for="tds_amount">TDS Amount</label>
+                            <div>
+                              <input type="text" class="form-control" value="<?php echo ($case->tds_amount) ?>" id="bankName" name="tds_amount" placeholder="TDS Amount">
+                            </div>
+                          </div>
+                          <div class="col-md-3">
+                            <label for="gst_amount">GST Amount</label>
+                            <div>
+                              <input type="text" class="form-control" value="<?php echo ($case->gst_amount) ?>" id="bankName" name="gst_amount" placeholder="GST Amount">
+                            </div>
+                          </div>
+                          <div class="col-md-3">
+                            <label for="comission_amount">Comission Amount</label>
+                            <div>
+                              <input type="text" class="form-control" value="<?php echo ($case->comission_amount) ?>" id="bankName" name="comission_amount" placeholder="Comission Amount">
+                            </div>
+                          </div>
+                        </div>
+
+                        <div class="form-group row">
+                          <div class="col-md-12">
+                            <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#modal-default-status-update" style="margin-top: 10px;">
+                              Submit
+                            </button>
+                          </div>
+                          <div class="modal fade" id="modal-default-status-update">
+                            <div class="modal-dialog">
+                              <div class="modal-content">
+                                <div class="modal-header">
+                                  <h4 class="modal-title">Status Update Details Creation/Updation!</h4>
+                                  <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                    <span aria-hidden="true">&times;</span>
+                                  </button>
+                                </div>
+                                <div class="modal-body">
+                                  <p>Are you sure you want to create/update Status Update Details?</p>
+                                </div>
+                                <div class="modal-footer justify-content-between">
+                                  <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                                  <button type="submit" name="submit-patient-status-update-details" class="btn btn-danger">Submit</button>
+                                </div>
+                              </div>
+                              <!-- /.modal-content -->
+                            </div>
+                            <!-- /.modal-dialog -->
+                          </div>
+                        </div>
+                      </form>
+
+                      <div class="col-md-12" id="policy-remarks">
+                        <div class="card">
+                          <div class="card-header">
+                            <h3 class="card-title">Status Update Details Remarks</h3>
+                          </div>
+                          <div class="card-body">
+                            <div class="tab-content">
+                              <form class="form-horizontal" method="post" enctype="multipart/form-data">
+                                <div class="form-group row">
+                                  <div class="col-md-6">
+                                    <label for="remarkType">Status Update Remark Type</label>
+                                    <div>
+                                      <input type="text" class="form-control" value="<?php echo ($case->remark_type) ?>" id="remarkType" name="remark_type" placeholder="Remark Type">
+                                    </div>
+                                  </div>
+                                  <div class="col-md-6">
+                                    <label for="remark">Status Update Remark</label>
+                                    <div>
+                                      <textarea class="form-control" name="remark" id="remark" placeholder="Remark"><?php echo ($case->remark) ?></textarea>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div class="form-group row">
+                                  <div class="col-md-12">
+                                    <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#modal-default-status-update-remark" style="margin-top: 10px;">
+                                      Submit
+                                    </button>
+                                  </div>
+                                  <div class="modal fade" id="modal-default-status-update-remark">
+                                    <div class="modal-dialog">
+                                      <div class="modal-content">
+                                        <div class="modal-header">
+                                          <h4 class="modal-title">Status Update Creation/Updation!</h4>
+                                          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                            <span aria-hidden="true">&times;</span>
+                                          </button>
+                                        </div>
+                                        <div class="modal-body">
+                                          <p>Are you sure you want to Enter Status Update Details?</p>
+                                        </div>
+                                        <div class="modal-footer justify-content-between">
+                                          <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                                          <button type="submit" name="submit-patient-status-update-remark" class="btn btn-danger">Submit</button>
+                                        </div>
+                                      </div>
+                                      <!-- /.modal-content -->
+                                    </div>
+                                    <!-- /.modal-dialog -->
+                                  </div>
+                                </div>
+                              </form>
+
+                              <table class="table table-striped projects">
+                                <thead>
+                                  <tr>
+                                    <th style="width: 10%">
+                                      Sr No.
+                                    </th>
+                                    <th style="width: 10%">
+                                      Remark Type
+                                    </th>
+                                    <th style="width: 25%">
+                                      Remark
+                                    </th>
+                                    <th style="width: 20%">
+                                      Author
+                                    </th>
+                                    <th style="width: 20%">
+                                      Date Time
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  <?php
+
+
+                                  $sql = mysqli_query(
+                                    $con,
+                                    "SELECT 
+                                      psur.id,
+                                      psur.case_id,
+                                      psur.remark_type,
+                                      psur.remark,
+                                      psur.is_active,
+                                      psur.inserted_by,
+                                      psur.created_at,
+                                      psur.inserted_by
+                                      FROM 
+                                          patient_status_update_remarks psur 
+                                      WHERE 
+                                          psur.is_active = 1 AND psur.case_id=$cid"
+                                  );
+                                  $cnt = 1;
+                                  while ($row = mysqli_fetch_array($sql)) {
+                                  ?>
+                                    <tr>
+                                      <td>
+                                        <?php echo ($cnt) ?>
+                                      </td>
+                                      <td>
+                                        <?php echo $row['remark_type'] ?>
+                                      </td>
+                                      <td>
+                                        <?php echo $row['remark'] ?>
+                                      </td>
+                                      <td>
+                                        <?php echo $row['inserted_by'] ?>
+                                      </td>
+
+                                      <td>
+                                        <?php echo $row['created_at'] ?>
+                                      </td>
+                                    </tr>
+                                  <?php
+                                    $cnt = $cnt + 1;
+                                  } ?>
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
             </div>
           </div>
         </section>
@@ -4716,6 +5514,7 @@ if (strlen($_SESSION['id'] == 0)) {
     <!-- Bootstrap 4 -->
     <script src="./plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
     <!-- Select2 -->
+    <script src="./plugins/select2/js/select2.full.min.js"></script>
     <script src="./plugins/select2/js/select2.full.min.js"></script>
     <!-- Bootstrap4 Duallistbox -->
     <script src="./plugins/bootstrap4-duallistbox/jquery.bootstrap-duallistbox.min.js"></script>
@@ -4805,6 +5604,14 @@ if (strlen($_SESSION['id'] == 0)) {
         });
 
         $('#reservationdate8').datetimepicker({
+          format: 'YYYY-MM-DD'
+        });
+
+        $('#reservationdate9').datetimepicker({
+          format: 'YYYY-MM-DD'
+        });
+
+        $('#reservationdate10').datetimepicker({
           format: 'YYYY-MM-DD'
         });
 
@@ -4924,6 +5731,26 @@ if (strlen($_SESSION['id'] == 0)) {
         myDropzone.removeAllFiles(true)
       }
       // DropzoneJS Demo Code End
+    </script>
+
+    <script>
+      // Function to scroll to the top of the page
+      function scrollToTop() {
+        window.scrollTo({
+          top: 0,
+          behavior: 'smooth'
+        });
+      }
+
+      // Show or hide the button based on scroll position
+      window.onscroll = function() {
+        let button = document.getElementById('scrollToTopBtn');
+        if (document.body.scrollTop > 200 || document.documentElement.scrollTop > 200) {
+          button.style.display = 'block';
+        } else {
+          button.style.display = 'none';
+        }
+      };
     </script>
   </body>
 
